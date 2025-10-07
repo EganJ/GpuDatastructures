@@ -53,6 +53,9 @@ namespace gpuds::unionfind
   {
     while (classes[i] != 0)
     {
+      // Classes should never return to being zero! Otherwise we have a
+      // data race here. In this case we may return a stale value but
+      // it will be on the path to the root.
       i = classes[i];
     }
     return i;
@@ -79,12 +82,16 @@ namespace gpuds::unionfind
   __device__ int get_class(int *classes, int i)
   {
     int root = get_class_readonly(classes, i);
-    // Path compression without recursion
-    for (int next = classes[i]; next != root; next = classes[i])
+    // Due to race conditions, the only thing we can say at this point is that
+    // root <= i, and that root eventually points to the same final class as i (though
+    // not necessarily on the same chain).
+    int old;
+    do
     {
-      classes[i] = root;
-      i = next;
-    }
+      old = atomicMin(classes + i, root); // can we safely un-atomic this? are there performance benefits?
+      i = old;
+    } while (old > root);
+
     return root;
   }
 
