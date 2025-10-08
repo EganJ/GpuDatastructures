@@ -2,6 +2,7 @@
 #define GPU_DATASTRUCTURES_H
 
 #include <vector>
+#include <string>
 namespace gpuds
 {
 
@@ -19,8 +20,11 @@ namespace gpuds
             UnionFind(int n);
             ~UnionFind();
             void massMerge(std::vector<int> &a, std::vector<int> &b);
+            void flatten();
             std::vector<int> getClasses();
         };
+
+        void read_from_file(std::string filedir, std::vector<int> &a, std::vector<int> &b, std::vector<int> &expected);
     }
 }
 

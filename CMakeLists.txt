@@ -22,3 +22,5 @@ target_link_libraries(main PRIVATE gpudslib)
 set_target_properties(main PROPERTIES
      CUDA_ARCHITECTURES "60;70;75;80;86"
 )
+
+add_executable(unionfind_test_generator src/make_unionfind_test.cpp)

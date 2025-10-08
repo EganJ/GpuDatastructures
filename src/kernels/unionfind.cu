@@ -129,7 +129,7 @@ namespace gpuds::unionfind
       // Safety can be seen as follows: a < b given locally, and b remains a root
       // from atomicity, so this mantains all our invariants. Liveness is a little more
       // dubious.
-    } while (0 == atomicCAS(classes + b, 0, a));
+    } while (0 != atomicCAS(classes + b, 0, a));
   }
 
   /*
@@ -151,9 +151,34 @@ namespace gpuds::unionfind
 
   void mass_merge(int *classes, const int *a, const int *b, int n)
   {
+    int blockSize = 32;
+    // int numBlocks = (n + blockSize - 1) / blockSize;
+    int numBlocks = 256;
+    kernel_mass_merge<<<numBlocks, blockSize>>>(classes, a, b, n);
+    cudaDeviceSynchronize();
+  }
+
+  // After all merges are done, call flatten to make all elements point directly
+  // to their root class. (Helps with checking correctness and may be useful for
+  // optimizing runtime after all merges are done.)
+  __global__ void kernel_flatten(int *classes, int n)
+  {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int work = impl::ceildiv(n, gridDim.x * blockDim.x);
+    int start = 1 + idx * work;
+    int end = min(1 + n, start + work);
+    for (int i = start; i < end; i++)
+    {
+      int val = get_class_readonly(classes, i);
+      classes[i] = (val == i) ? 0 : val;
+    }
+  }
+
+  void flatten(int *classes, int n)
+  {
     int blockSize = 256;
     int numBlocks = (n + blockSize - 1) / blockSize;
-    kernel_mass_merge<<<numBlocks, blockSize>>>(classes, a, b, n);
+    kernel_flatten<<<numBlocks, blockSize>>>(classes, n);
     cudaDeviceSynchronize();
   }
 
