@@ -2,11 +2,15 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <stdexcept>
+#include <fstream>
+#include <cassert>
 
 // Declaration of unionfind device functions from .cu file
+
 namespace gpuds::unionfind
 {
     void mass_merge(int *classes, const int *a, const int *b, int n);
+    void flatten(int *classes, int n);
 
     UnionFind::UnionFind(int n) : num_elements(n)
     {
@@ -58,11 +62,43 @@ namespace gpuds::unionfind
         cudaFree(d_b);
     }
 
+    void UnionFind::flatten()
+    {
+        gpuds::unionfind::flatten(cuda_class_array, num_elements);
+        cudaDeviceSynchronize();
+    }
+
     std::vector<int> UnionFind::getClasses()
     {
         std::vector<int> out_classes(num_elements);
         size_t arr_size = out_classes.size() * sizeof(int);
         cudaMemcpy(out_classes.data(), cuda_class_array + 1, arr_size, cudaMemcpyDeviceToHost);
         return out_classes;
+    }
+
+    void read_from_file(std::string filedir, std::vector<int> &a, std::vector<int> &b, std::vector<int> &expected)
+    {
+        std::string expected_file = filedir + "/expected.data";
+        std::string merges_file = filedir + "/mergers.data";
+
+        // First value in each is the number of elements/merges.
+        // All files are in binary format, with 16-bit integers.
+        std::ifstream expected_f(expected_file, std::ios::binary);
+        assert(!!expected_f);
+        int num_elements;
+        expected_f.read((char *)&num_elements, sizeof(num_elements));
+        expected.resize(num_elements);
+        expected_f.read((char *)expected.data(), sizeof(int) * num_elements);
+        expected_f.close();
+
+        std::ifstream merges_f(merges_file, std::ios::binary);
+        assert(!!merges_f);
+        int num_merges;
+        merges_f.read((char *)&num_merges, sizeof(num_merges));
+        a.resize(num_merges);
+        b.resize(num_merges);
+        merges_f.read((char *)a.data(), sizeof(int) * num_merges);
+        merges_f.read((char *)b.data(), sizeof(int) * num_merges);
+        merges_f.close();
     }
 }
