@@ -1,25 +1,34 @@
 #include "datastructures.h"
 #include <iostream>
 
-int main() {
-  std::cout << "Hello, World!" << std::endl;
+void testUnionFind()
+{
+  const int num_elements = 10;
+  gpuds::unionfind::UnionFind uf(num_elements);
 
-  const int N = 1024;
-  float a[N], b[N], c[N];
+  std::vector<int> a = {1, 2, 3, 6, 8};
+  std::vector<int> b = {2, 4, 4, 7, 10};
 
-  // Initialize vectors
-  for (int i = 0; i < N; ++i) {
-    a[i] = static_cast<float>(i);
-    b[i] = static_cast<float>(i);
+  std::cout << "Before merging: " << std::endl;
+  std::vector<int> preclasses = uf.getClasses();
+  for (int i = 0; i < preclasses.size(); ++i)
+  {
+    std::cout << "Element " << i + 1 << " is in class " << preclasses[i] << std::endl;
   }
 
-  // Call GPU vector addition
-  gpuds::vectorAdd(a, b, c, N);
+  std::cout << "Merging pairs:" << std::endl;
 
-  // Print a few results
-  for (int i = 0; i < 10; ++i) {
-    std::cout << "c[" << i << "] = " << c[i] << std::endl;
+  uf.massMerge(a, b);
+
+  std::vector<int> classes = uf.getClasses();
+  for (int i = 0; i < classes.size(); ++i)
+  {
+    std::cout << "Element " << i + 1 << " is in class " << classes[i] << std::endl;
   }
+}
 
+int main()
+{
+  testUnionFind();
   return 0;
 }
