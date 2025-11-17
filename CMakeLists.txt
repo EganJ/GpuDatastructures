@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 
 project(gpudatastructures LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 20)
+# set(CMAKE_BUILD_TYPE Debug)
 
 # Collect all source files
 file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS

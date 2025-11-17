@@ -54,7 +54,76 @@ const std::unordered_map<std::string, FuncName> map = {
     {"not", Not},
     {"if", If},
     {"and", And},
-    {"or", Or}};
+    {"or", Or},
+    {"+", Plus},
+    {"-", Minus},
+    {"*", Multiply},
+    {"/", Divide},
+    {"neg", Neg},
+    {"pow", Pow},
+    {"sqrt", Sqrt},
+    {"fabs", FAbs},
+    {"cbrt", Cbrt},
+    {"log", Log},
+    {"exp", Exp},
+    {"sin", Sin},
+    {"cos", Cos},
+    {"tan", Tan},
+    {"asin", ASin},
+    {"acos", ACos},
+    {"atan", ATan},
+    {"sinh", Sinh},
+    {"cosh", Cosh},
+    {"tanh", Tanh},
+    {"asinh", ASinh},
+    {"acosh", ACosh},
+    {"atanh", ATanh},
+    {"<", LT},
+    {"<=", LE},
+    {">", GT},
+    {">=", GE},
+    {"not", Not},
+    {"if", If},
+    {"and", And},
+    {"or", Or},
+    {"floor", UnknownUnary},
+    {"fmax", UnknownBinary},
+    {"log2", UnknownUnary}, // TODO could possibly desugar these
+    {"hypot", UnknownBinary}, // TODO could possibly desugar these
+    {"atan2", UnknownBinary}, // TODO can this be desugared?
+    {"fmod", UnknownBinary},
+    {"==", UnknownBinary}, // TODO for bools, can be desugared
+    {"fma", UnknownTernary}, // TODO could possibly desugar this, or add to op set.
+    {"re_sqr", UnknownBinary}, // Actually user-defined function in terms of our ops (possible through FPCore)
+    {"im_sqr", UnknownBinary}, // Actually user-defined function in terms of our ops (possible through FPCore)
+    {"modulus_sqr", UnknownBinary}, // Actually user-defined function in terms of our ops (possible through FPCore)
+    {"modulus", UnknownBinary}, // Actually user-defined function in terms of our ops (possible through FPCore)
+    {"copysign", UnknownBinary}, // Actually user-defined function in terms of our ops (possible through FPCore)
+    {"log1p", UnknownUnary}, // Actually user-defined function in terms of our ops (possible through FPCore)
+    };
+
+std::string opToName(FuncName fn)
+{
+    switch (fn) {
+        case UnknownUnary:
+            return "unknown_unary";
+        case UnknownBinary:
+            return "unknown_binary";
+        case UnknownTernary:
+            return "unknown_ternary";
+        default:
+            break;
+    }
+
+    for (const auto &pair : map)
+    {
+        if (pair.second == fn)
+        {
+            return pair.first;
+        }
+    }
+    return "unknown_op";
+}
 
 bool isSkipChar(char c)
 {
@@ -78,12 +147,21 @@ bool isWordEndChar(char c)
     return false;
 }
 
+void skipAll(std::string in, int &index)
+{
+    while (index < in.size() && isSkipChar(in[index]))
+        index++;
+}
+
 std::string nextToken(std::string in, int &index)
 {
-    while (isSkipChar(in[index]))
-        index++;
+    skipAll(in, index);
+    if (index >= in.size())
+    {
+        return "";
+    }
     int start = index;
-    while (!isWordEndChar(in[index]) && index < in.size())
+    while (index < in.size() && (!isWordEndChar(in[index]) || index == start))
         index++;
     int end = index;
 
@@ -95,8 +173,11 @@ std::string nextToken(std::string in, int &index)
  */
 std::string nextTerm(std::string in, int &index, char open = '(', char close = ')')
 {
-    while (isSkipChar(in[index]))
-        index++;
+    skipAll(in, index);
+    if (index >= in.size())
+    {
+        return "";
+    }
     int start = index;
     if (in[index] != open)
     {
@@ -118,6 +199,41 @@ std::string nextTerm(std::string in, int &index, char open = '(', char close = '
         int end = index; // index is after close paren
         return in.substr(start, end - start);
     }
+}
+
+/**
+ * Returns the next term with the given delimiters, skipping any leading items in the string
+ * until an open
+ */
+std::string nextTermInSequence(std::string in, int &index, char open = '(', char close = ')')
+{
+    while (index < in.size() && in[index] != open)
+        index++;
+    if (index >= in.size())
+        return "";
+
+    return nextTerm(in, index, open, close);
+}
+
+/**
+ * May be [var expr] or (var expr) bindings
+ */
+std::string nextLetBinding(std::string in, int &index)
+{
+    while(index < in.size() && (
+        in[index] != '[' && in[index] != '(' && in[index] != ')' && in[index] != ']'
+    )) {
+        index++;
+    }
+    int start = index;
+    if (index >= in.size() || (in[index] != '[' && in[index] != '('))
+    {
+        return "";
+    }
+    char open = in[index];
+    char close = (open == '[') ? ']' : ')';
+    // find matching closing
+    return nextTerm(in, index, open, close);
 }
 
 int encode_float(float f)
@@ -162,7 +278,8 @@ FuncNode strToFunc(std::string in, std::map<std::string, int> &varNums)
         else
         {
             debugPrint("Variable: " + in);
-            if (varNums.find(in) == varNums.end()) {
+            if (varNums.find(in) == varNums.end())
+            {
                 debugPrint("Assigning var number " + std::to_string(varNums.size()) + " to variable " + in);
                 varNums[in] = varNums.size();
             }
@@ -182,31 +299,89 @@ FuncNode strToFunc(std::string in, std::map<std::string, int> &varNums)
 /**
  * Builds a tree from the input string, returning the index of the root node in the nodes vector.
  * Expects "in" in the form "(op arg1 arg2 ...)" or "atom".
+ *
+ * May have let bindings.
  */
-unsigned buildTree(std::string in, std::vector<FuncNode> &nodes, std::map<std::string, int> &varNums)
+unsigned buildTree(std::string in, std::vector<FuncNode> &nodes, std::map<std::string, int> &varNums, std::map<std::string, unsigned> &letBindings)
 {
     if (in[0] != '(')
     {
-        FuncNode terminal = strToFunc(in, varNums);
-        nodes.push_back(terminal);
-        return nodes.size() - 1;
+        // Check if it's a let binding
+        if (letBindings.find(in) != letBindings.end())
+        {
+            return letBindings[in];
+        }
+        else
+        {
+            FuncNode terminal = strToFunc(in, varNums);
+            nodes.push_back(terminal);
+            return nodes.size() - 1;
+        }
     }
     else
     {
         int start = 1; // skip opening paren
         std::string op = nextToken(in, start);
-        FuncNode f = strToFunc(op, varNums);
-        int argc = getOperandCount(f.name);
 
-        for (int i = 0; i < getOperandCount(f.name); ++i)
+        if (op == "let" || op == "let*")
         {
-            std::string term = nextTerm(in, start);
-            unsigned child_id = buildTree(term, nodes, varNums);
-            f.args[i] = child_id;
-        }
+            bool sequential = (op == "let*");
+            std::map<std::string, unsigned> localBindings; // copy parent bindings
+            // If sequential this will write to letBindings for each term to read in sequence,
+            // otherwise write to localBindings and merge at end.
+            auto &write_bindings = sequential ? letBindings : localBindings;
+            std::string bindings_term = nextTerm(in, start);
+            std::string expr = nextTerm(in, start);
 
-        nodes.push_back(f);
-        return nodes.size() - 1;
+            // Parse bindings
+            int bind_index = 1; // skip open paren
+            std::string binding;
+            while ((binding = nextLetBinding(bindings_term, bind_index)) != "")
+            {
+                int local_bind_index = 1;
+                std::string bind_name = nextToken(binding, local_bind_index);
+                std::string bind_expr = nextTerm(binding, local_bind_index);
+                unsigned var_node = buildTree(bind_expr, nodes, varNums, letBindings);
+                write_bindings[bind_name] = var_node;
+            }
+
+            // Merge local bindings if not sequential
+            if (!sequential)
+            {
+                for (const auto &pair : localBindings)
+                {
+                    letBindings[pair.first] = pair.second;
+                }
+            }
+
+            // Build and return main expr
+            return buildTree(expr, nodes, varNums, letBindings);
+        }
+        else
+        {
+
+            FuncNode f = strToFunc(op, varNums);
+            int argc = getOperandCount(f.name);
+
+            for (int i = 0; i < getOperandCount(f.name); ++i)
+            {
+                std::string term = nextTerm(in, start);
+                // Only one ambiguity here: unary vs binary minus.
+                if (f.name == Minus && term == ")")
+                {
+                    // It's a unary minus
+                    f.name = Neg;
+                    argc = 1;
+                    break;
+                }
+
+                unsigned child_id = buildTree(term, nodes, varNums, letBindings);
+                f.args[i] = child_id;
+            }
+
+            nodes.push_back(f);
+            return nodes.size() - 1;
+        }
     }
 }
 
@@ -221,17 +396,44 @@ void parseRule(std::vector<FuncNode> &nodes, std::vector<Rule> &rules, std::stri
     std::string rule_name = nextToken(rule, pos); // throw this away for now
 
     std::map<std::string, int> varNums;
+    std::map<std::string, unsigned> letBindings;
     std::string lhs_str = nextTerm(rule, pos);
-    unsigned lhs_root = buildTree(lhs_str, nodes, varNums);
+    unsigned lhs_root = buildTree(lhs_str, nodes, varNums, letBindings);
 
     std::string rhs_str = nextTerm(rule, pos);
-    unsigned rhs_root = buildTree(rhs_str, nodes, varNums);
+    unsigned rhs_root = buildTree(rhs_str, nodes, varNums, letBindings);
+    assert(letBindings.size() == 0 && "Let bindings should not be used in rule parsing");
 
     Rule r;
     r.id = rules.size();
     r.lhs = lhs_root;
     r.rhs = rhs_root;
     rules.push_back(r);
+}
+
+std::string printExpression(const std::vector<FuncNode> &nodes, uint32_t nodeId)
+{
+    std::string result = "";
+    const FuncNode &node = nodes[nodeId];
+    if (node.name == Var)
+    {
+        result += "v" + std::to_string(nodes[nodeId].args[0]);
+    }
+    else if (node.name == Const)
+    {
+        float val = std::bit_cast<float>(nodes[nodeId].args[0]);
+        result += std::to_string(val);
+    }
+    else
+    {
+        result += "(" + opToName(node.name);
+        for (int i = 0; i < getOperandCount(node.name); ++i)
+        {
+            result += " " + printExpression(nodes, node.args[i]);
+        }
+        result += ")";
+    }
+    return result;
 }
 
 /**
@@ -259,39 +461,75 @@ void parseRuleFile(std::ifstream &file, std::vector<FuncNode> &nodes, std::vecto
     }
 }
 
-std::string opToName(FuncName fn)
+void stripFPCoreComments(std::string &in)
 {
-    for (const auto &pair : map)
-    {
-        if (pair.second == fn)
-        {
-            return pair.first;
-        }
-    }
-    return "unknown_op";
+   // Find all ; and replace to end of line with spaces
+   size_t pos = 0;
+   while ((pos = in.find(';', pos)) != std::string::npos){
+         size_t end_pos = in.find('\n', pos);
+         if (end_pos == std::string::npos) {
+              end_pos = in.size();
+         }
+         for (size_t i = pos; i < end_pos; ++i) {
+              in[i] = ' ';
+         }
+         pos = end_pos;
+   }
 }
 
-std::string printExpression(const std::vector<FuncNode> &nodes, uint32_t nodeId)
+/**
+ * Does not require that all expressions fit in a single line.
+ * Will find an FPCore expression, parse its vars, and parse the last term (the expression body).
+ * Will ignore any other content in the expression.
+ */
+void parseFPCoreFile(std::ifstream &file, std::vector<FuncNode> &nodes, std::vector<uint32_t> &expr_roots)
 {
-   std::string result = "";
-    const FuncNode &node = nodes[nodeId];
-   if (node.name == Var)
-   {
-       result += "v" + std::to_string(nodes[nodeId].args[0]);
-   }
-   else if (node.name == Const)
-   {
-       float val = std::bit_cast<float>(nodes[nodeId].args[0]);
-       result += std::to_string(val);
-   }
-   else
-   {
-       result += "(" + opToName(node.name);
-       for (int i = 0; i < getOperandCount(node.name); ++i)
-       {
-           result += " " + printExpression(nodes, node.args[i]);
-       }
-       result += ")";
-   }
-   return result;
+    // Read file to string in entirety
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    stripFPCoreComments(content);
+
+    int index = 0;
+    for (std::string found = nextTermInSequence(content, index); found != ""; found = nextTermInSequence(content, index))
+    {
+        debugPrint("Found term: " + found);
+        int sub_index = 1; // skip open paren
+        std::string token = nextToken(found, sub_index);
+        assert(token == "FPCore" && "Parse error: expected FPCore expression");
+
+        std::string vars = nextTermInSequence(found, sub_index);
+        debugPrint("Vars: " + vars);
+
+        std::map<std::string, int> varNums;
+        std::map<std::string, unsigned> letBindings;
+
+        // Spin up a new var. Since we know them ahead of time, we can bind them directly
+        // into the letBindings. We then should expect varNums to remain empty.
+        int var_str_idx = 1; // skip open paren
+        std::string var_name;
+        while ((var_name = nextToken(vars, var_str_idx)) != ")")
+        {
+            unsigned var_node = nodes.size();
+            FuncNode varFunc;
+            varFunc.name = Var;
+            varFunc.args[0] = letBindings.size();
+            nodes.push_back(varFunc);
+            letBindings[var_name] = var_node;
+        }
+
+        // Find last term in FPCore expression.
+        std::string found_rev = found;
+        std::reverse(found_rev.begin(), found_rev.end());
+        int rev_index = 1; // skip close paren
+        std::string last_term = nextTerm(found_rev, rev_index, ')', '(');
+        std::reverse(last_term.begin(), last_term.end());
+        debugPrint("Last term: " + last_term);
+
+        // Parse last term with let bindings. Check that no unbound vars are encountered.
+        unsigned expr_root = buildTree(last_term, nodes, varNums, letBindings);
+        assert(varNums.size() == 0 && "All vars should be bound in let bindings");
+        expr_roots.push_back(expr_root);
+
+        debugPrint("Parsed expression: " + printExpression(nodes, expr_root));
+    }
 }

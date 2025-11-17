@@ -18,8 +18,8 @@
  :pre (<= 1.9 t 2.1)
  :alt 
  (! :herbie-platform default
-  (let ([x 1.7e308])
+  (let ([x 1.7e3])
    (fma x t (- x))))
    
- (let ([x 1.7e308])
+ (let ([x 1.7e3])
    (- (* x t) x)))

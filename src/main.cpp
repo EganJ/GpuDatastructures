@@ -1,8 +1,10 @@
 #include <iostream>
 #include <iomanip>
+#include <filesystem>
 
 #include "datastructures.h"
 #include "parser.h"
+
 
 void testUnionFindSmall()
 {
@@ -103,6 +105,29 @@ int main()
   {
     Rule &r = rules[i];
     std::cout << "Rule " << r.id << ": " << printExpression(nodes, r.lhs) << "  -->  " << printExpression(nodes, r.rhs) << std::endl;
-  } 
+  }
+
+  // Parse FPCore expressions
+  // std::ifstream fpcorefile("bench/graphics/lod.fpcore");
+  // std::vector<uint32_t> expr_roots;
+  // parseFPCoreFile(fpcorefile, nodes, expr_roots);
+  std::string benchdir = "bench/";
+  // Look through all directories and subdirectories of benchdir for .fpcore files
+  // For each .fpcore file, parse it and print the number of nodes parsed
+  std::vector<uint32_t> expr_roots;
+  try {
+    for (const auto & entry : std::filesystem::recursive_directory_iterator(benchdir))
+    {
+      if (entry.path().extension() == ".fpcore")
+      {
+        std::cout << "Parsing FPCore file: " << entry.path() << std::endl;
+        std::ifstream fpcorefile(entry.path());
+        parseFPCoreFile(fpcorefile, nodes, expr_roots);
+      }
+    }
+  } catch (std::filesystem::filesystem_error& e) {
+      std::cout << "Filesystem error: " << e.what() << std::endl;
+  }
+  
   return 0;
 }

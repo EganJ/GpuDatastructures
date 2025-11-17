@@ -37,7 +37,10 @@ enum FuncName {
     Not,
     If,
     And,
-    Or
+    Or,
+    UnknownUnary,
+    UnknownBinary,
+    UnknownTernary
 };
 
 const unsigned char func_operand_count[] = {
@@ -74,7 +77,10 @@ const unsigned char func_operand_count[] = {
     1,    // {"not", Not},
     3,    // {"if", If},
     2,    // {"and", And},
-    1     // {"or", Or}
+    1,    // {"or", Or},
+    1,    // UnknownUnary,
+    2,    // UnknownBinary,
+    3     // UnknownTernary
 };
 
 
