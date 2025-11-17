@@ -18,6 +18,11 @@ const char skipchars[] = {' ', '\t', '\n'};
 int n_word_endchars = 4;
 const char word_endchars[] = {'(', ')', '[', ']'}; // plus any skipchars
 
+void debugPrint(const std::string &msg)
+{
+    std::cout << msg << std::endl;
+}
+
 const std::unordered_map<std::string, FuncName> map = {
     {"+", Plus},
     {"-", Minus},
@@ -123,7 +128,7 @@ int encode_float(float f)
 /**
  * Returns the FuncNode populated only with the opcode (and var/const value, if applicable).
  */
-FuncNode strToFunc(std::string in, std::map<std::string, int> varNums)
+FuncNode strToFunc(std::string in, std::map<std::string, int> &varNums)
 {
     FuncNode f;
 
@@ -156,8 +161,11 @@ FuncNode strToFunc(std::string in, std::map<std::string, int> varNums)
         }
         else
         {
-            if (varNums.find(in) == varNums.end())
+            debugPrint("Variable: " + in);
+            if (varNums.find(in) == varNums.end()) {
+                debugPrint("Assigning var number " + std::to_string(varNums.size()) + " to variable " + in);
                 varNums[in] = varNums.size();
+            }
 
             f.name = Var;
             f.args[0] = varNums[in];
@@ -175,7 +183,7 @@ FuncNode strToFunc(std::string in, std::map<std::string, int> varNums)
  * Builds a tree from the input string, returning the index of the root node in the nodes vector.
  * Expects "in" in the form "(op arg1 arg2 ...)" or "atom".
  */
-unsigned buildTree(std::string in, std::vector<FuncNode> &nodes, std::map<std::string, int> varNums)
+unsigned buildTree(std::string in, std::vector<FuncNode> &nodes, std::map<std::string, int> &varNums)
 {
     if (in[0] != '(')
     {
@@ -207,6 +215,7 @@ unsigned buildTree(std::string in, std::vector<FuncNode> &nodes, std::map<std::s
  */
 void parseRule(std::vector<FuncNode> &nodes, std::vector<Rule> &rules, std::string &rule)
 {
+    debugPrint("Parsing rule: " + rule);
     assert(rule[0] == '[');
     int pos = 1;                                  // skip opening bracket
     std::string rule_name = nextToken(rule, pos); // throw this away for now
@@ -248,4 +257,41 @@ void parseRuleFile(std::ifstream &file, std::vector<FuncNode> &nodes, std::vecto
             }
         }
     }
+}
+
+std::string opToName(FuncName fn)
+{
+    for (const auto &pair : map)
+    {
+        if (pair.second == fn)
+        {
+            return pair.first;
+        }
+    }
+    return "unknown_op";
+}
+
+std::string printExpression(const std::vector<FuncNode> &nodes, uint32_t nodeId)
+{
+   std::string result = "";
+    const FuncNode &node = nodes[nodeId];
+   if (node.name == Var)
+   {
+       result += "v" + std::to_string(nodes[nodeId].args[0]);
+   }
+   else if (node.name == Const)
+   {
+       float val = std::bit_cast<float>(nodes[nodeId].args[0]);
+       result += std::to_string(val);
+   }
+   else
+   {
+       result += "(" + opToName(node.name);
+       for (int i = 0; i < getOperandCount(node.name); ++i)
+       {
+           result += " " + printExpression(nodes, node.args[i]);
+       }
+       result += ")";
+   }
+   return result;
 }

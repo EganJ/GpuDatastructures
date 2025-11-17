@@ -92,5 +92,17 @@ int main()
   std::vector<Rule> rules{};
   parseRuleFile(rulefile, nodes, rules);
   std::cout << "Parsed " << rules.size() << " rules with " << nodes.size() << " function nodes." << std::endl;
+  std::cout << "Head:" << std::endl;
+  for (int i = 0; i < std::min(5, (int)rules.size()); ++i)
+  {
+    Rule &r = rules[i];
+    std::cout << "Rule " << r.id << ": " << printExpression(nodes, r.lhs) << "  -->  " << printExpression(nodes, r.rhs) << std::endl;
+  }
+  std::cout << "Tail:" << std::endl;
+  for (int i = std::max(0, (int)rules.size() - 5); i < rules.size(); ++i)
+  {
+    Rule &r = rules[i];
+    std::cout << "Rule " << r.id << ": " << printExpression(nodes, r.lhs) << "  -->  " << printExpression(nodes, r.rhs) << std::endl;
+  } 
   return 0;
 }
