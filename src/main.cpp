@@ -1,6 +1,8 @@
-#include "datastructures.h"
 #include <iostream>
 #include <iomanip>
+
+#include "datastructures.h"
+#include "parser.h"
 
 void testUnionFindSmall()
 {
@@ -81,7 +83,14 @@ void testUnionFindLarge()
 
 int main()
 {
-  testUnionFindSmall();
-  testUnionFindLarge();
+  // testUnionFindSmall();
+  // testUnionFindLarge();
+
+  std::ifstream rulefile("rules.txt");
+ 
+  std::vector<FuncNode> nodes{};
+  std::vector<Rule> rules{};
+  parseRuleFile(rulefile, nodes, rules);
+  std::cout << "Parsed " << rules.size() << " rules with " << nodes.size() << " function nodes." << std::endl;
   return 0;
 }
