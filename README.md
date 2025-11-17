@@ -1,20 +1,8 @@
-# GpuDatastructures
+# Gpu Equality Saturation
 
-## Installation Instructions
+## Egg 
+Many of the design elements of our equality saturation tool come from Egg ([website](https://egraphs-good.github.io/) and [paper](https://dl.acm.org/doi/10.1145/3434304)), including
+deferred rebuilding and separate match-lhs and apply-rhs stages. 
 
-Requires a machine with an NVIDIA gpu. The following details how to set up the environment and project using conda, but conda is not strictly required.
-
-Environment setup:
-```
-// Create environment as normal
-conda create MyEnv && conda activate MyEnv
-conda install -c nvidia cuda-toolkit
-```
-
-Building and running:
-```
-mkdir build
-cmake . -B build
-cd build && make
-./main
-```
+## Herbie
+Our test suite `bench/` and rule set `rules.txt` are derived from Herbie: [https://github.com/herbie-fp/herbie](https://github.com/herbie-fp/herbie)
