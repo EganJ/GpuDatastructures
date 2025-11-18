@@ -1,22 +1,9 @@
 #ifndef GPUDS_KERNELS_LINKEDLIST_CUH
 #define GPUDS_KERNELS_LINKEDLIST_CUH
 
+#include <assert.h>
+
 const unsigned NULL_ID = std::numeric_limits<unsigned>::max();
-
-/**
- * @brief A buffer which can contain multiple blocked lists.
- * To create one, cast a block of memory to this struct.
- */
-struct BlockedListBuffer
-{
-    int buffer_size = 0;
-    char buffer_data[0];
-
-    __device__ inline char *index(unsigned idx)
-    {
-        return &buffer_data[idx];
-    }
-};
 
 /**
  * @brief A node of a blocked linked list. This node can contain more than one element.
@@ -30,6 +17,34 @@ struct ListNode
 };
 
 /**
+ * @brief A buffer which can contain multiple blocked lists.
+ * To create one, cast a block of memory to this struct.
+ */
+struct BlockedListBuffer
+{
+    int buffer_size = 0;
+    int buffer_allocated = 0;
+    char buffer_data[0];
+
+    __host__ __device__ inline char *index(unsigned idx)
+    {
+        return &buffer_data[idx];
+    }
+
+    __device__ inline ListNode *allocateBlock(unsigned block_size_char)
+    {
+        int alloc_size = sizeof(ListNode) + block_size_char;
+        auto alloc_end = atomicAdd(&buffer_allocated, alloc_size);
+        assert(alloc_end < buffer_size);
+        auto alloc_start = alloc_end - alloc_size;
+        auto ln = (ListNode *)index(alloc_start);
+        ln->block_size = block_size_char;
+        ln->next_node = NULL_ID;
+        return ln;
+    }
+};
+
+/**
  * @brief A blocked linked list. Stores pointers to the first and last element for easy concatenation.
  * Pointers are indexes into the buffer.
  */
@@ -38,20 +53,26 @@ struct BlockedList
     BlockedListBuffer *buffer;
     unsigned start_pointer;
     unsigned end_pointer;
+
+    __device__ void initalize(BlockedListBuffer *buf)
+    {
+        buffer = buf;
+        start_pointer = NULL_ID;
+        end_pointer = NULL_ID;
+    }
 };
 
-BlockedList newBlockedList(BlockedListBuffer *buffer);
+__host__ __device__ BlockedList newBlockedList(BlockedListBuffer *buffer);
 
 __host__ __device__ ListNode *getNode(BlockedList *bl, int index);
 
-__device__ unsigned getIndex(BlockedList *bl, ListNode *ln);
+__host__ __device__ unsigned getIndex(BlockedList *bl, ListNode *ln);
 
 __device__ unsigned resolveListEnd(BlockedListBuffer *start, unsigned block_idx);
 
 __device__ unsigned resolveListEnd(BlockedList *bl);
 
 __device__ void addToList(BlockedList *bl, ListNode *ln);
-
 __device__ BlockedList *concatLists(BlockedList *a, BlockedList *b);
 
 __device__ ListNode *newNode(BlockedListBuffer *buffer, unsigned block_size);

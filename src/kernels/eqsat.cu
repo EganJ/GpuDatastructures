@@ -13,13 +13,40 @@ using namespace gpuds::eqsat;
 /**
  * Host-side code to initialize memory structures needed for eqsat.
  */
-void initialize_eqsat_memory()
+void initialize_ruleset(std::vector<FuncNode> &rule_nodes_host, std::vector<Rule> &rules_host)
 {
-    // func_operand_counts (device) to func_arg_counts (host)
+    // rule_nodes_host to global_ruleset.rule_nodes (device)
     cudaMemcpyToSymbol(
-        func_arg_counts,
-        func_operand_count,
-        sizeof(func_operand_count));
+        global_ruleset.rule_nodes,
+        rule_nodes_host.data(),
+        rule_nodes_host.size() * sizeof(FuncNode));
+
+    // rules_host to global_ruleset.rules (device)
+    cudaMemcpyToSymbol(
+        global_ruleset.rules,
+        rules_host.data(),
+        rules_host.size() * sizeof(Rule));
+}
+
+__global__ void initialize_eqsat_solver(EqSatSolver *solver)
+{
+    if (threadIdx.x == 0 && blockIdx.x == 0)
+    {
+        solver->n_rule_matches = 0;
+    }
+}
+
+__host__ EqSatSolver *construct_eqsat_solver(const std::vector<FuncNode> node_space_host,
+                                             const std::vector<int> roots_host,
+                                             std::vector<int> &compressed_roots)
+{
+    EqSatSolver *d_solver;
+    cudaMalloc(&d_solver, sizeof(EqSatSolver));
+    initialize_eqsat_solver<<<1, 1>>>(d_solver);
+    cudaMemset(d_solver->rule_matches, 0, sizeof(RuleMatch) * MAX_RULE_MATCHES);
+    initialize_egraph(&d_solver->egraph, node_space_host, roots_host, compressed_roots);
+
+    return d_solver;
 }
 
 enum BindRelation
@@ -198,7 +225,7 @@ __device__ int find_matches_enode(EGraph &graph, const FuncNode &pattern, int en
     }
 
     // Have two op node with same name. Check arity.
-    unsigned char n_args = func_arg_counts[pattern.name];
+    unsigned char n_args = getFuncArgCount(pattern.name);
 
     MultiMatch m1 = match_in;
     MultiMatch m2;
@@ -344,8 +371,8 @@ __global__ void gpuds::eqsat::kernel_eqsat_match_rules(EqSatSolver *solver)
 
 void gpuds::eqsat::launch_eqsat_match_rules(EqSatSolver *solver)
 {
-    int blockSize = 32 * ((N_RULES / 32) + 1); // At least 1 thread per rule and as tight as possible.
-    int numBlocks = 512;                       // TODO tune. Can this be num_nodes or something?
+    int blockSize = N_RULES;
+    int numBlocks = 512; // TODO tune. Can this be num_nodes or something?
     kernel_eqsat_match_rules<<<numBlocks, blockSize>>>(solver);
     cudaDeviceSynchronize();
 }

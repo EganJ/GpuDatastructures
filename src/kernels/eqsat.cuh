@@ -10,7 +10,6 @@
 
 namespace gpuds::eqsat
 {
-    __constant__ char func_arg_counts[sizeof(func_operand_count)/sizeof(func_operand_count[0])];
 
     struct Ruleset
     {
@@ -34,19 +33,25 @@ namespace gpuds::eqsat
 
     class EqSatSolver
     {
-        public:
+    public:
         EGraph egraph; // large.
 
         // Storage for matches found during rule matching.
         int n_rule_matches = 0;
         RuleMatch rule_matches[MAX_RULE_MATCHES]; // large.
-
     };
 
     __global__ void kernel_eqsat_match_rules(EqSatSolver *solver);
     void launch_eqsat_match_rules(EqSatSolver *solver);
 
     void initialize_eqsat_memory();
+
+    /**
+     * Constructs an EqSatSolver on the device and returns a pointer to it.
+     */
+    __host__ EqSatSolver *construct_eqsat_solver(const std::vector<FuncNode> node_space_host,
+                                                 const std::vector<int> roots_host,
+                                                 std::vector<int> &compressed_roots);
 
 } // namespace gpuds::eqsat
 
