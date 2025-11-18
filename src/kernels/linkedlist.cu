@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <stdio.h>
 
 const unsigned NULL_ID = std::numeric_limits<unsigned>::max();
 
@@ -57,7 +58,7 @@ struct BlockedList
  * @param blb A blocked list buffer in which the list's nodes will reside
  * @return BlockedList struct which represents the start and end indices of a list.
  */
-BlockedList newBlockedList(BlockedListBuffer *blb)
+__host__ __device__ BlockedList newBlockedList(BlockedListBuffer *blb)
 {
   BlockedList bl;
   bl.buffer = blb;
@@ -74,7 +75,7 @@ BlockedList newBlockedList(BlockedListBuffer *blb)
  * @param index The index to look at
  * @return ListNode* A list node at which the index points to, representing a list node.
  */
-__device__ ListNode *getNode(BlockedList *bl, int index)
+__host__ __device__ ListNode *getNode(BlockedList *bl, int index)
 {
   return (ListNode *)&(bl->buffer->buffer_data[index]);
 }
@@ -86,10 +87,82 @@ __device__ ListNode *getNode(BlockedList *bl, int index)
  * @param ln A list node
  * @return int The index into the blocked list's buffer of the node
  */
-__device__ unsigned getIndex(BlockedList *bl, ListNode *ln)
+__host__ __device__ unsigned getIndex(BlockedList *bl, ListNode *ln)
 {
-  return (unsigned)((char *)&(bl->buffer->buffer_data) - (char *)ln);
+  return (unsigned)((char *)ln - (char *)&(bl->buffer->buffer_data));
 }
+
+
+/**
+ * @brief Iterator which can be used to iterate through the elements of a
+ * BlockedList. Requires all blocks of the blocked list to be sized a multiple
+ * of the size of datatype given.
+ * 
+ * @tparam T Type of value to extract
+ */
+template <typename T>
+struct ListIterator
+{
+  BlockedList* list;
+  ListNode* node;
+  int element_index;
+  bool finished = false;
+
+  /**
+   * @brief Construct a new ListIterator object starting at the beginning of the
+   * linked list given
+   * 
+   * @param bl The linked list given
+   */
+  ListIterator(BlockedList* bl)
+  {
+    list = bl;
+    if (bl->start_pointer == NULL_ID)
+      finished = true;
+    else
+    {
+      node = getNode(bl, bl->start_pointer);
+      element_index = 0;
+    }
+  }
+
+  /**
+   * @brief Gets the next element in the list, if there are any left.
+   * 
+   * @param result Where the next element will be stored.
+   * @return true If an element was returned
+   * @return false If we're at the end of the list. In this case, "result" is unchanged.
+   */
+  bool next(T* result)
+  {
+    if (finished)
+      return false;
+
+    *result = *((T*) &node->data[element_index]);
+    element_index += sizeof(T);
+    if (element_index >= node->block_size)
+    {
+      element_index = 0;
+      if (node->next_node == NULL_ID)
+        finished = true;
+      else
+        node = getNode(list, node->next_node);
+    }
+
+    return true;
+  }
+
+  /**
+   * @brief Returns if there are any elements left in the list being iterated through.
+   * 
+   * @return true 
+   * @return false 
+   */
+  bool hasNext()
+  {
+    return !finished;
+  }
+};
 
 /**
  May return a stale value!
@@ -97,8 +170,10 @@ __device__ unsigned getIndex(BlockedList *bl, ListNode *ln)
 __device__ unsigned resolveListEnd(BlockedListBuffer *start, unsigned block_idx)
 {
   ListNode *node = (ListNode *)start->index(block_idx);
+  printf("resolving list end %d\n", node->next_node);
   while (node->next_node != NULL_ID)
   {
+    // printf("%d: %p %d %d\n", threadIdx.x, node, (int) node - (int) (&start->buffer_data), node->next_node);
     block_idx = node->next_node;
     node = (ListNode *)start->index(block_idx);
   }
@@ -128,15 +203,23 @@ __device__ void addToList(BlockedList *bl, ListNode *ln)
 {
   unsigned idx = getIndex(bl, ln);
 
+  if (atomicCAS(&bl->end_pointer, NULL_ID, idx) == NULL_ID)
+  {
+    bl->start_pointer = idx;
+    return;
+  }
+  // printf("ln next is %d\n", ln->next_node);
   // getNode(bl, bl->end_pointer)->next_node = idx;
   // bl->end_pointer = idx;
   unsigned last_node_idx = 0;
   ListNode *end_node;
   do
   {
+    // printf("it's loopin' time %d\n", idx);
     last_node_idx = resolveListEnd(bl);
     end_node = getNode(bl, last_node_idx);
   } while (atomicCAS(&end_node->next_node, NULL_ID, idx) != NULL_ID);
+  // printf("done looping!\n");
   atomicCAS(&bl->end_pointer, last_node_idx, idx); // May be stale but that's fine. Could be omitted.
 }
 
@@ -152,9 +235,12 @@ __device__ void addToList(BlockedList *bl, ListNode *ln)
  */
 __device__ BlockedList *concatLists(BlockedList *bl1, BlockedList *bl2)
 {
+  // printf("begin concat\n");
   addToList(bl1, getNode(bl2, bl2->start_pointer));
+  // printf("added to list\n");
   // Could be skipped, performance opt only.
   atomicCAS(&bl1->end_pointer, bl2->start_pointer, bl2->end_pointer);
+  // printf("end concat\n");
   return bl1;
 }
 
@@ -172,4 +258,88 @@ __device__ ListNode *newNode(BlockedListBuffer *blb, int size)
   ln->block_size = size;
   ln->next_node = NULL_ID;
   return ln;
+}
+
+// Kernel to test creation of a bunch of list nodes
+__global__ void testListCreation(BlockedListBuffer* buffer)
+{
+  ListNode* ln = newNode(buffer, 4);
+}
+
+// Elements in the test
+#define TEST_COUNT 100
+
+// Tests making a bunch of lists and concatenating them all together
+__global__ void testListMegaConcat(BlockedListBuffer* buffer)
+{
+  __shared__ BlockedList lists[TEST_COUNT];
+
+  // Everyone makes their own list node
+  ListNode* ln = newNode(buffer, 4);
+  ln->data[0] = threadIdx.x;
+
+  // Everyone makes their own list with that node, saves in shared memory
+  lists[threadIdx.x] = newBlockedList(buffer);
+  addToList(&lists[threadIdx.x], ln);
+
+  __syncthreads();
+
+  // Now, concatenate your list to someone else's
+  if (threadIdx.x > 0)
+    concatLists(&lists[threadIdx.x / 3], &lists[threadIdx.x]);
+}
+
+// Host side code to test many concatenations
+void testListMegaConcatOnHost()
+{
+  printf("begin\n");
+
+  // Create a big enough buffer
+  BlockedListBuffer* buffer;
+  int size = 1000000;
+  cudaMalloc(&buffer, size);
+
+  // Do the mega concat kernel
+  testListMegaConcat<<<1, TEST_COUNT>>>(buffer);
+
+  // Get the data back
+  cudaDeviceSynchronize();
+  BlockedListBuffer* bufferOnHost = (BlockedListBuffer*) malloc(size);
+  cudaMemcpy(bufferOnHost, buffer, size, cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+
+  // Dump the contents of the data and find where element 0 is
+  int start = -1;
+  for (int i = 1; i < TEST_COUNT * 3; i += 3)
+  {
+    if (((int*) bufferOnHost)[i + 2] == 0)
+      start = i;
+
+    printf("%d | %d %d %d \n", i * 4 - 4, ((int*) bufferOnHost)[i], ((int*) bufferOnHost)[i + 1], ((int*) bufferOnHost)[i + 2]);
+  }
+  printf("\n");
+
+  // Create a host-side list starting at element 0...
+  BlockedList bl = newBlockedList(bufferOnHost);
+  bl.start_pointer = getIndex(&bl, (ListNode*) &((int*) bufferOnHost)[start]);
+  char covered[TEST_COUNT];
+  for (int i = 0; i < TEST_COUNT; i++)
+    covered[i] = 0;
+
+  // ...and try iterating through it!
+  int next;
+  for (ListIterator<int> i = ListIterator<int>(&bl); i.next(&next);)
+  {
+    printf("%d, ", next); 
+    covered[next]++;
+  }
+  printf("\n");
+
+  // Make sure we found every element!
+  for (int i = 0; i < TEST_COUNT; i++)
+    printf("%d ", covered[i]);
+  printf("\n");
+
+  // All done!
+  printf("end\n");
 }
