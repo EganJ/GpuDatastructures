@@ -98,7 +98,11 @@ int main()
     {
         printf("Initializing keyvalue pairs with random numbers...\n");
 
-        std::vector<KeyValue> insert_kvs = generate_random_keyvalues(rnd, kNumKeyValues);
+        // std::vector<KeyValue> insert_kvs = generate_random_keyvalues(rnd, kNumKeyValues);
+        std::vector<KeyValue> insert_kvs;
+        for (int i = 0; i < 32; i++){
+            insert_kvs.push_back(KeyValue{i,i});
+        }
         std::vector<KeyValue> delete_kvs = shuffle_keyvalues(rnd, insert_kvs, kNumKeyValues / 2);
 
         // Begin test
@@ -110,37 +114,39 @@ int main()
         KeyValue* pHashTable = create_hashtable();
 
         // Insert items into the hash table
-        const uint32_t num_insert_batches = 16;
+        const uint32_t num_insert_batches = 1;
         uint32_t num_inserts_per_batch = (uint32_t)insert_kvs.size() / num_insert_batches;
-        for (uint32_t i = 0; i < num_insert_batches; i++)
-        {
-            insert_hashtable(pHashTable, insert_kvs.data() + i * num_inserts_per_batch, num_inserts_per_batch);
-        }
+        insert_hashtable(pHashTable, insert_kvs.data(), num_inserts_per_batch);
+        // for (uint32_t i = 0; i < num_insert_batches; i++)
+        // {
+        //     insert_hashtable(pHashTable, insert_kvs.data() + i * num_inserts_per_batch, num_inserts_per_batch);
+        // }
 
-        // Delete items from the hash table
-        const uint32_t num_delete_batches = 8;
-        uint32_t num_deletes_per_batch = (uint32_t)delete_kvs.size() / num_delete_batches;
-        for (uint32_t i = 0; i < num_delete_batches; i++)
-        {
-            delete_hashtable(pHashTable, delete_kvs.data() + i * num_deletes_per_batch, num_deletes_per_batch);
-        }
+        // // Delete items from the hash table
+        // const uint32_t num_delete_batches = 8;
+        // uint32_t num_deletes_per_batch = (uint32_t)delete_kvs.size() / num_delete_batches;
+        // for (uint32_t i = 0; i < num_delete_batches; i++)
+        // {
+        //     delete_hashtable(pHashTable, delete_kvs.data() + i * num_deletes_per_batch, num_deletes_per_batch);
+        // }
 
-        // Get all the key-values from the hash table
-        std::vector<KeyValue> kvs = iterate_hashtable(pHashTable);
+        // // Get all the key-values from the hash table
+        // std::vector<KeyValue> kvs = iterate_hashtable(pHashTable);
 
-        destroy_hashtable(pHashTable);
+        // destroy_hashtable(pHashTable);
 
-        // Summarize results
-        double milliseconds = get_elapsed_time(timer);
-        double seconds = milliseconds / 1000.0f;
-        printf("Total time (including memory copies, readback, etc): %f ms (%f million keys/second)\n", milliseconds,
-            kNumKeyValues / seconds / 1000000.0f);
+        // // Summarize results
+        // double milliseconds = get_elapsed_time(timer);
+        // double seconds = milliseconds / 1000.0f;
+        // printf("Total time (including memory copies, readback, etc): %f ms (%f million keys/second)\n", milliseconds,
+        //     kNumKeyValues / seconds / 1000000.0f);
 
-        test_unordered_map(insert_kvs, delete_kvs);
+        // test_unordered_map(insert_kvs, delete_kvs);
 
-        test_correctness(insert_kvs, delete_kvs, kvs);
+        // test_correctness(insert_kvs, delete_kvs, kvs);
 
-        printf("Success\n");
+        // printf("Success\n");
+        exit(0);
     }
 
     return 0;

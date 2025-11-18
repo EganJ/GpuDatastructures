@@ -6,7 +6,9 @@ struct KeyValue
     uint32_t value;
 };
 
-const uint32_t kHashTableCapacity = 128 * 1024 * 1024;
+// const uint32_t kHashTableCapacity = 128 * 1024 * 1024;
+const uint32_t kHashTableCapacity = 64;
+
 
 const uint32_t kNumKeyValues = kHashTableCapacity / 2;
 

@@ -55,6 +55,7 @@ void test_correctness(std::vector<KeyValue> insert_kvs, std::vector<KeyValue> de
         }
     }
 
+    printf("%d, %d \n", unique_keys.size(), all_kvs_map.size()); 
     if (unique_keys.size() != all_kvs_map.size())
     {
         printf("# of unique keys in hashtable is incorrect\n");
