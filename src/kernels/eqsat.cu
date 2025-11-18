@@ -1,3 +1,7 @@
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <assert.h>
+
 #include "eqsat.cuh"
 #include "const_params.cuh"
 
@@ -18,59 +22,253 @@ void initialize_eqsat_memory()
         sizeof(func_operand_count));
 }
 
+enum BindRelation
+{
+    Equal,        // All bindings are equal.
+    LHSWeaker,    // LHS bindings are a subset of RHS bindings.
+    RHSWeaker,    // RHS bindings are a subset of LHS bindings.
+    Compatible,   // Different set of non-conflicting bindings.
+    Incompatible, // Conflicting bindings.
+};
 
-// class RuleMatchIterator {
-//     int current_index[MAX_RULE_TERMS];
-//     int current_eclass_ids[MAX_RULE_TERMS];
-//     int current_var_bindings
-// };
+struct VarBind
+{
+    bool bound;
+    int bindings[MAX_RULE_VARS];
+
+    __device__ VarBind()
+    {
+        for (int i = 0; i < MAX_RULE_VARS; i++)
+        {
+            bindings[i] = -1;
+        }
+        bound = false;
+    }
+
+    __device__ VarBind join_with(const VarBind &other, VarBind &result) const
+    {
+        for (int i = 0; i < MAX_RULE_VARS; i++)
+        {
+            if (min(bindings[i], other.bindings[i]) == -1 || bindings[i] == other.bindings[i])
+            {
+                result.bound = true;
+                result.bindings[i] = max(bindings[i], other.bindings[i]);
+            }
+            else
+            {
+                result.bindings[i] = -1;
+            }
+        }
+        return result;
+    }
+
+    __device__ BindRelation compare(const VarBind &other) const
+    {
+        bool lhs_subset = true; // non-strict subsets. If both true, equal.
+        bool rhs_subset = true;
+        for (int i = 0; i < MAX_RULE_VARS; i++)
+        {
+            if (bindings[i] == -1)
+            {
+                rhs_subset = rhs_subset && (other.bindings[i] == -1);
+            }
+            if (other.bindings[i] == -1)
+            {
+                lhs_subset = lhs_subset && (bindings[i] == -1);
+            }
+            if (bindings[i] != -1 && other.bindings[i] != -1)
+            {
+                if (bindings[i] != other.bindings[i])
+                {
+                    return Incompatible;
+                }
+            }
+        }
+        if (lhs_subset && rhs_subset)
+        {
+            return Equal;
+        }
+        if (lhs_subset)
+        {
+            return LHSWeaker;
+        }
+        if (rhs_subset)
+        {
+            return RHSWeaker;
+        }
+        return Compatible;
+    }
+};
+
+struct MultiMatch
+{
+    int n_matches;
+    VarBind var_binds[MULTIMATCH_LIMIT];
+
+    __device__ static inline MultiMatch nomatch()
+    {
+        MultiMatch mm;
+        mm.n_matches = 0;
+        return mm;
+    }
+
+    /**
+     * Adds a new binding option if it wasn't already present in an equal or weaker form, and there
+     * is space. Returns true if anything was added.
+     */
+    __device__ bool add_binding(const VarBind &new_bind)
+    {
+        if (n_matches >= MULTIMATCH_LIMIT)
+        {
+            return false;
+        }
+        for (int i = 0; i < n_matches; i++)
+        {
+            BindRelation rel = var_binds[i].compare(new_bind);
+            if (rel == Equal || rel == LHSWeaker)
+            {
+                // Already have this or a weaker binding.
+                return false;
+            }
+        }
+        var_binds[n_matches] = new_bind;
+        n_matches++;
+        return true;
+    }
+
+    __device__ int add_bindings(const MultiMatch &other)
+    {
+        int n_added = 0;
+        for (int i = 0; i < other.n_matches; i++)
+        {
+            if (add_binding(other.var_binds[i]))
+            {
+                n_added++;
+            }
+        }
+        return n_added;
+    }
+};
+
+__device__ void find_matches_eclass(EGraph &graph, const FuncNode &pattern, int eclass_idx,
+                                    const MultiMatch &match_in, MultiMatch &match_out);
 
 /**
- * Since a rule may match multiple times depending on choice of bindings,
- * or initial choice of bindings may determine whether a rule can match
- * at all, we allow for a fixed number of potential bindings.
+ * Finds mathes from a root pattern to a given enode. Patterns may return multiple matches:
+ * this is limited by the MULTIMATCH_LIMIT constant.
  *
- * Inputs:
- *  - egraph: egraph context
- *  - pattern: funcnode from the global ruleset representing the pattern to match
- *  - enode_idx: index of the enode to attempt to match against
- *  - out_bindings: array to write extended bindings to. Size MULTIMATCH_LIMIT.
- * Returns:
- * - number of entries written to out_bindings
+ * Parameters:
+ *  - graph: The egraph to search in.
+ *  - pattern: The pattern to match, a funcnode in the global ruleset nodespace.
+ *  - enode_idx: The index of the enode to match against.
+ *  - match_in: Existing variable bindings to respect.
+ *  - match_out: Will append found matches here.
+ *
+ * Returns: The number of new matches added to match_out.
  */
-// __device__ unsigned count_matches_enode(EGraph &egraph, const FuncNode &pattern, unsigned enode_idx,
-//                              RuleMatch *out_bindings)
-// {
-//     FuncNode enode = egraph.getNode(enode_idx);
+__device__ int find_matches_enode(EGraph &graph, const FuncNode &pattern, int enode_idx,
+                                  const MultiMatch &match_in, MultiMatch &match_out)
+{
+    MultiMatch result = MultiMatch::nomatch();
+    FuncNode enode = graph.getNode(enode_idx);
 
-//     if (enode.name != pattern.name)
-//     {
-//         return 0;
-//     }
+    // If pattern is a variable, we should be in find_matches_eclass instead.
+    // If pattern is a constant, match only if enode is the same constant.
+    // If pattern is a func, need to recursively check structural match and bindings.
+    if (pattern.name == FuncName::Var)
+    {
+        // Hint: patterns should not be rooted with Var, so this should not be the first
+        // visit, and subsequent visits should catch Var subterms before calling here.
+        assert(false && "Should not reach here with Var pattern");
+    }
+    else if (pattern.name == FuncName::Const)
+    {
+        if (enode.name != FuncName::Const || pattern.args[0] != enode.args[0])
+        {
+            return 0;
+        }
+        else
+        {
+            return match_out.add_bindings(match_in);
+        }
+    }
+    else if (pattern.name != enode.name)
+    {
+        return 0; // Different function names, no structural match.
+    }
 
-//     if (enode.name == FuncName::Const)
-//     {
-//         // For constants, we require exact match of value.
-//         if (enode.args[0] != pattern.args[0])
-//         {
-//             return 0;
-//         }
-//         return copy_available_to_space<RuleMatch>(in_bindings, in_bindings_count, out_bindings, out_bindings_space);
-//     }
+    // Have two op node with same name. Check arity.
+    unsigned char n_args = func_arg_counts[pattern.name];
 
-//     RuleMatch binds[MAX_FUNC_ARGS][MULTIMATCH_LIMIT];
-//     unsigned bind_counts[MAX_FUNC_ARGS];
+    MultiMatch m1 = match_in;
+    MultiMatch m2;
+    bool rotate = false;
+    for (int arg = 0; arg < n_args; arg++)
+    {
+        MultiMatch &m_current = (rotate ? m2 : m1);
+        MultiMatch &m_next = (rotate ? m1 : m2);
+        m_next.n_matches = 0;
 
-//     // Project structurally down, collecting possible bindings to merge later.
-//     int argc = func_arg_counts[static_cast<int>(pattern.name)];
-//     for (int i = 0; i < argc; i++)
-//     {
-//         bind_counts[i] = count_matches_eclass(egraph, pattern, enode.args[i], binds[i]);
-//     }
+        // Give current bindings to subterm and determine subsequent bindings.
+        FuncNode pattern_arg = global_ruleset.rule_nodes[pattern.args[arg]];
+        int eclass_id = graph.resolveClassReadOnly(enode.args[arg]);
+        find_matches_eclass(graph, pattern_arg, eclass_id, m_current, m_next);
+        rotate = !rotate;
+    }
+    int new_matches = 0;
+    auto &subterm_matches = (rotate ? m2 : m1);
+    for (int i = 0; i < subterm_matches.n_matches; i++)
+    {
+        if (match_out.add_binding(subterm_matches.var_binds[i]))
+        {
+            new_matches++;
+        }
+    }
+    return new_matches;
+}
 
-//     // Now we have a (subset of the) possible bindings for each structural child.
-//     // Need to see if any combinations of these are compatible.
-// }
+/**
+ * Finds matches from a root pattern to a given eclass. This is where the multimatch
+ * possibilities stem from: different choices of nodes within the eclass lead to different
+ * var bindings, with effects seen in other branches if vars repeat more than once.
+ *
+ * Parameters:
+ *  - graph: The egraph to search in.
+ *  - pattern: The pattern to match, a funcnode in the global ruleset nodespace.
+ *  - eclass_idx: The index of the eclass to match against.
+ *  - match_in: Existing variable binding possibliities.
+ *  - match_out: Will append found matches here. Each found match will be equal or stronger than a
+ *   match in match_in.
+ */
+__device__ void find_matches_eclass(EGraph &graph, const FuncNode &pattern, int eclass_idx,
+                                    const MultiMatch &match_in, MultiMatch &match_out)
+{
+    // If pattern is a var, we can pass through any candidate bindings that are unbound or match.
+    if (pattern.name == FuncName::Var)
+    {
+        int var_id = pattern.args[0];
+        for (int i = 0; i < match_in.n_matches; i++)
+        {
+            VarBind candidate_bind = match_in.var_binds[i];
+            if (candidate_bind.bindings[var_id] == -1 ||
+                candidate_bind.bindings[var_id] == eclass_idx)
+            {
+                candidate_bind.bindings[var_id] = eclass_idx;
+                match_out.add_binding(candidate_bind);
+            }
+        }
+        return;
+    }
+
+    // Otherwise, need to check each enode in the eclass.
+    BlockedList *class_nodes = &graph.class_to_nodes[eclass_idx];
+    int enode_idx;
+    ListIterator<int> it(class_nodes);
+    while (it.next(&enode_idx))
+    {
+        find_matches_enode(graph, pattern, enode_idx, match_in, match_out);
+    }
+}
 
 __global__ void gpuds::eqsat::kernel_eqsat_match_rules(EqSatSolver *solver)
 {
@@ -93,18 +291,19 @@ __global__ void gpuds::eqsat::kernel_eqsat_match_rules(EqSatSolver *solver)
         // TODO we can retrieve our slice of nodes into local beforehand,
         // to avoid fetching per rule.
         const FuncNode node = solver->egraph.getNode(node_idx);
-        RuleMatch match;
-        // if (matches_pattern(solver->egraph, node, my_rule, match))
-        // {
-        //     // TODO
-        // }
+        MultiMatch initial_match = MultiMatch::nomatch();
+        initial_match.add_binding(VarBind()); // Start with empty binding.
+        MultiMatch found_matches = MultiMatch::nomatch();
+        find_matches_enode(solver->egraph, my_rule, node_idx, initial_match, found_matches);
+
+        // TODO store in local matches, then flush to global when full.
     }
 }
 
 void gpuds::eqsat::launch_eqsat_match_rules(EqSatSolver *solver)
 {
     int blockSize = 32 * ((N_RULES / 32) + 1); // At least 1 thread per rule and as tight as possible.
-    int numBlocks = 512;                      // TODO tune. Can this be num_nodes or something?
+    int numBlocks = 512;                       // TODO tune. Can this be num_nodes or something?
     kernel_eqsat_match_rules<<<numBlocks, blockSize>>>(solver);
     cudaDeviceSynchronize();
 }

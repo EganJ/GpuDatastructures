@@ -77,7 +77,7 @@ struct ListIterator
      *
      * @param bl The linked list given
      */
-    ListIterator(BlockedList *bl)
+    __host__ __device__ ListIterator(BlockedList *bl)
     {
         list = bl;
         if (bl->start_pointer == NULL_ID)
@@ -96,7 +96,7 @@ struct ListIterator
      * @return true If an element was returned
      * @return false If we're at the end of the list. In this case, "result" is unchanged.
      */
-    bool next(T *result)
+    __host__ __device__ bool next(T *result)
     {
         if (finished)
             return false;
@@ -121,7 +121,7 @@ struct ListIterator
      * @return true
      * @return false
      */
-    bool hasNext()
+    __host__ __device__ bool hasNext()
     {
         return !finished;
     }
