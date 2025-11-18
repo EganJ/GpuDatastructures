@@ -19,5 +19,6 @@ const int MAX_NODES = 50000;
 // Parameters for the LHS matching phase
 const int N_LOCAL_MATCH_BUFF = 256; // Size of the shared-memory buffer for holding matches per block
 const int MULTIMATCH_LIMIT = 4; // Making this finite may miss possible matches. 
+const int MAX_RULE_MATCHES = 10000; // Tweak this.
 
 #endif

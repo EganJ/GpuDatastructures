@@ -272,7 +272,15 @@ __device__ void find_matches_eclass(EGraph &graph, const FuncNode &pattern, int 
 
 __global__ void gpuds::eqsat::kernel_eqsat_match_rules(EqSatSolver *solver)
 {
-    RuleMatch local_matches[N_LOCAL_MATCH_BUFF];
+    __shared__ int local_match_count;
+    __shared__ int global_allocation_start;
+    __shared__ RuleMatch local_matches[N_LOCAL_MATCH_BUFF];
+
+    if (threadIdx.x == 0)
+    {
+        local_match_count = 0;
+    }
+    __syncthreads();
 
     // Each node is owned by exactly one block.
     int n_nodes = solver->egraph.getNumNodes();
@@ -281,22 +289,56 @@ __global__ void gpuds::eqsat::kernel_eqsat_match_rules(EqSatSolver *solver)
     int end_node = min(n_nodes, start_node + nodes_per_block);
 
     // For each node, each thread covers one rule.
-    int my_thread = threadIdx.x;
-    if (my_thread >= N_RULES)
+    if (threadIdx.x >= N_RULES)
         return;
 
-    FuncNode my_rule = global_ruleset.rule_nodes[my_thread];
+    FuncNode my_rule = global_ruleset.rule_nodes[threadIdx.x];
     for (int node_idx = start_node; node_idx < end_node; node_idx++)
     {
         // TODO we can retrieve our slice of nodes into local beforehand,
         // to avoid fetching per rule.
         const FuncNode node = solver->egraph.getNode(node_idx);
+        int eclass_idx = solver->egraph.node_to_class[node_idx];
+
         MultiMatch initial_match = MultiMatch::nomatch();
         initial_match.add_binding(VarBind()); // Start with empty binding.
         MultiMatch found_matches = MultiMatch::nomatch();
         find_matches_enode(solver->egraph, my_rule, node_idx, initial_match, found_matches);
 
         // TODO store in local matches, then flush to global when full.
+        int allocation_start = atomicAdd(&local_match_count, found_matches.n_matches);
+        int allocation_end = allocation_start + found_matches.n_matches;
+        allocation_end = min(allocation_end, N_LOCAL_MATCH_BUFF);
+        for (int i = allocation_start; i < allocation_end; i++)
+        {
+            local_matches[i].lhs_class_id = eclass_idx;
+            local_matches[i].rhs_root = node_idx;
+            for (int j = 0; j < MAX_RULE_TERMS; j++)
+                local_matches[i].var_bindings[j] = found_matches.var_binds[i - allocation_start].bindings[j];
+        }
+    }
+
+    __syncthreads();
+
+    // Flush local matches to global. Leader thread should allocate into global buffer.
+    if (threadIdx.x == 0)
+    {
+        int allocation_start = atomicAdd(&solver->n_rule_matches, local_match_count);
+        global_allocation_start = allocation_start;
+    }
+    __syncthreads();
+
+    int allocation_start = global_allocation_start;
+    int allocation_end = min(MAX_RULE_MATCHES, allocation_start + local_match_count);
+    int copies_per_thread = (allocation_end - allocation_start + blockDim.x - 1) / blockDim.x;
+
+    int my_start = threadIdx.x * copies_per_thread;
+    int my_end = min(local_match_count, my_start + copies_per_thread);
+    my_end = min(my_end, allocation_end - allocation_start);
+    for (int i = my_start; i < my_end; i++)
+    {
+        int alloc_idx = allocation_start + i;
+        solver->rule_matches[alloc_idx] = local_matches[i];
     }
 }
 

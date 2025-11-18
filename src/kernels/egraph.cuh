@@ -17,6 +17,7 @@ struct EGraph
 
     // Nodes storage only for nodes in the e-graph
     FuncNode node_space[MAX_NODES];
+    int node_to_class[MAX_NODES];
 
     // Union-find structure to manage classes
     int class_ids[MAX_CLASSES + 1]; // +1 because 0 is discarded by unionfind

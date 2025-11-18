@@ -36,6 +36,11 @@ namespace gpuds::eqsat
     {
         public:
         EGraph egraph; // large.
+
+        // Storage for matches found during rule matching.
+        int n_rule_matches = 0;
+        RuleMatch rule_matches[MAX_RULE_MATCHES]; // large.
+
     };
 
     __global__ void kernel_eqsat_match_rules(EqSatSolver *solver);
