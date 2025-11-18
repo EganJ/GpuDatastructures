@@ -84,7 +84,7 @@ const unsigned char func_operand_count[] = {
 };
 
 
-const static unsigned char MAX_ARGS = 3;
+const static unsigned char MAX_FUNC_ARGS = 3;
 struct FuncNode {
     FuncName name;
     unsigned char numArgs;
@@ -93,10 +93,10 @@ struct FuncNode {
      * In case of Var, gives ID of variable.
      * In case of Const, gives value (as casted float)
      */
-    uint32_t args[MAX_ARGS]; 
+    uint32_t args[MAX_FUNC_ARGS]; 
 };
 // all rules match to 4 variables or less (but possibly greater nodes)
-const static unsigned char MAX_VARS = 4; 
+const static unsigned char MAX_RULE_VARS = 4; 
 struct Rule {
     uint32_t id;
     uint32_t lhs; // Id of the lhs FuncNode root

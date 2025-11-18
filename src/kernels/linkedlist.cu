@@ -1,7 +1,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 
-const unsigned NULL_ID = std::numeric_limits<unsigned>::max();
+#include "linkedlist.cuh"
 
 /**
  * @brief A blocked linked list representation which is easily portable to the GPU.
@@ -14,42 +14,8 @@ const unsigned NULL_ID = std::numeric_limits<unsigned>::max();
  * transferring data over different buffers (such as CPU -> GPU) will require fewer pointers to be rewritten.
  */
 
-/**
- * @brief A buffer which can contain multiple blocked lists.
- * To create one, cast a block of memory to this struct.
- */
-struct BlockedListBuffer
-{
-  int buffer_size = 0;
-  char buffer_data[0];
 
-  __device__ inline char *index(unsigned idx)
-  {
-    return &buffer_data[idx];
-  }
-};
 
-/**
- * @brief A node of a blocked linked list. This node can contain more than one element.
- * Indexes into a blocked list buffer (not stored in the list node for compactness).
- */
-struct ListNode
-{
-  unsigned block_size;
-  unsigned next_node;
-  char data[0];
-};
-
-/**
- * @brief A blocked linked list. Stores pointers to the first and last element for easy concatenation.
- * Pointers are indexes into the buffer.
- */
-struct BlockedList
-{
-  BlockedListBuffer *buffer;
-  unsigned start_pointer;
-  unsigned end_pointer;
-};
 
 /**
  * @brief Creates a new blocked linked list in a given buffer of memory.

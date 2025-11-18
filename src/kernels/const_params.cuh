@@ -1,0 +1,23 @@
+#ifndef GPUDS_KERNELS_CONST_PARAMS_CUH
+#define GPUDS_KERNELS_CONST_PARAMS_CUH
+
+// TODO currently hardcoded from the rules list, find more elegant way
+// Number of rules in the rules list, exact.
+const int N_RULES = 301;
+// Maximum number of terms across all rules.
+const int MAX_RULESET_TERMS = 3000;
+const int MAX_RULE_TERMS = 8;
+
+// Made-up limits for now
+// Maximum number of supported equivalence classes, counting 
+// ones that have been merged away.
+const int MAX_CLASSES = 10000;
+// Maximum number of nodes in the e-graph.
+const int MAX_NODES = 50000;
+
+
+// Parameters for the LHS matching phase
+const int N_LOCAL_MATCH_BUFF = 256; // Size of the shared-memory buffer for holding matches per block
+const int MULTIMATCH_LIMIT = 4; // Making this finite may miss possible matches. 
+
+#endif

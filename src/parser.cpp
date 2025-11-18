@@ -20,7 +20,7 @@ const char word_endchars[] = {'(', ')', '[', ']'}; // plus any skipchars
 
 void debugPrint(const std::string &msg)
 {
-    std::cout << msg << std::endl;
+    // std::cout << msg << std::endl;
 }
 
 const std::unordered_map<std::string, FuncName> map = {

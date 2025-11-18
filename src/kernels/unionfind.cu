@@ -22,10 +22,10 @@
  * simultaneously. Any data-race is undefined behavior, and has no defined
  * semantics. The resulting values for A and B can be anything."
  */
-
 #include <cstdio>
 #include <cuda_runtime.h>
 
+#include "unionfind.cuh"
 namespace gpuds::unionfind
 {
   namespace impl
@@ -183,3 +183,4 @@ namespace gpuds::unionfind
   }
 
 } // namespace gpuds::unionfind
+

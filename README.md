@@ -48,3 +48,8 @@ Exploration is divided into 3 phases, which are looped in sequence until fixpoin
 * Important: while inserting, multiple different blocks may try to add the same new node. It is ok if they both take up a slot in the memory buffer, but only one should be added to any e-class. This can be done with an atomic op while adding to the hash-cons that returns the e-class only of the first thread to insert that same block.
 
 ### Repair
+
+
+## Limitations
+
+* In general, the same rule may match to the same e-graph node multiple times, for multiple choices of values. This is tricky to implement, and we currently take 
