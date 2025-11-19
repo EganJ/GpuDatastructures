@@ -250,12 +250,7 @@ FuncNode strToFunc(std::string in, std::map<std::string, int> &varNums)
 
     if (map.find(in) == map.end())
     {
-        if (std::string("-+0123456789").find(in[0]) != std::string::npos)
-        {
-            f.name = Const;
-            f.args[0] = encode_float(std::stof(in));
-        }
-        else if (in == "1/2")
+        if (in == "1/2")
         {
             f.name = Const;
             f.args[0] = encode_float(0.5);
@@ -275,6 +270,11 @@ FuncNode strToFunc(std::string in, std::map<std::string, int> &varNums)
             f.name = Const;
             f.args[0] = encode_float(E);
         }
+        else if (std::string("-+0123456789").find(in[0]) != std::string::npos)
+        {
+            f.name = Const;
+            f.args[0] = encode_float(std::stof(in));
+        } 
         else
         {
             debugPrint("Variable: " + in);

@@ -1,6 +1,10 @@
 #include "egraph.cuh"
 #include "const_params.cuh"
 #include <stdio.h>
+#include <iostream>
+
+// TODO remove this as soon as debugging is not needed
+#include "../parser.h"
 
 __global__ void initialize_empty_lists(EGraph *egraph)
 {
@@ -99,6 +103,13 @@ __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &hos
 {
     std::vector<FuncNode> compressed_nodes;
     compress_nodespace(host_nodes, roots, compressed_nodes, compressed_roots);
+
+    // Print all nodes in the compressed nodespace
+    printf("Compressed Nodespace:\n");
+    for (int i = 0; i < compressed_nodes.size(); i++)
+    {
+        std::cout << "Node " << i << ": " << printExpression(compressed_nodes, i) << std::endl;
+    }
 
     std::vector<int> class_ids(compressed_nodes.size());
     for (int i = 0; i < class_ids.size(); i++)

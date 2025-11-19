@@ -34,8 +34,7 @@ namespace gpuds::eqsat
         cudaMemcpyToSymbol(
             global_ruleset,
             rules_host.data(),
-            // rules_host.size() * sizeof(Rule),
-            100,
+            rules_host.size() * sizeof(Rule),
             offsetof(Ruleset, rules),
             cudaMemcpyHostToDevice);
     }
@@ -273,7 +272,8 @@ namespace gpuds::eqsat
 
     /**
      * Finds matches from a root pattern to a given eclass. This is where the multimatch
-     * possibilities stem from: different choices of nodes within the eclass lead to different
+     * possibilities stem from: different choices of nodes within the eclass l
+lead to different
      * var bindings, with effects seen in other branches if vars repeat more than once.
      *
      * Parameters:
@@ -336,7 +336,8 @@ namespace gpuds::eqsat
         if (threadIdx.x >= N_RULES)
             return;
 
-        FuncNode my_rule = global_ruleset.rule_nodes[threadIdx.x];
+        const Rule my_rule = global_ruleset.rules[threadIdx.x];
+        const FuncNode my_rule_node = global_ruleset.rule_nodes[my_rule.lhs];
         for (int node_idx = start_node; node_idx < end_node; node_idx++)
         {
             // TODO we can retrieve our slice of nodes into local beforehand,
@@ -347,7 +348,16 @@ namespace gpuds::eqsat
             MultiMatch initial_match = MultiMatch::nomatch();
             initial_match.add_binding(VarBind()); // Start with empty binding.
             MultiMatch found_matches = MultiMatch::nomatch();
-            find_matches_enode(solver->egraph, my_rule, node_idx, initial_match, found_matches);
+            if (my_rule_node.name == FuncName::Var)
+            {
+                // TODO for trivial LHS, do we want to randomly skip sometimes?
+                VarBind vb;
+                vb.bound = true;
+                vb.bindings[my_rule_node.args[0]] = eclass_idx;
+                found_matches.add_binding(vb);
+            } else {
+                find_matches_enode(solver->egraph, my_rule_node, node_idx, initial_match, found_matches);
+            }
 
             // TODO store in local matches, then flush to global when full.
             int allocation_start = atomicAdd(&local_match_count, found_matches.n_matches);
@@ -355,8 +365,9 @@ namespace gpuds::eqsat
             allocation_end = min(allocation_end, N_LOCAL_MATCH_BUFF);
             for (int i = allocation_start; i < allocation_end; i++)
             {
+                printf("matched rule %d to node %d\n", threadIdx.x, node_idx);
                 local_matches[i].lhs_class_id = eclass_idx;
-                local_matches[i].rhs_root = node_idx;
+                local_matches[i].rhs_root = my_rule.rhs;
                 for (int j = 0; j < MAX_RULE_TERMS; j++)
                     local_matches[i].var_bindings[j] = found_matches.var_binds[i - allocation_start].bindings[j];
             }
@@ -388,6 +399,13 @@ namespace gpuds::eqsat
 
     void launch_eqsat_match_rules(EqSatSolver *solver)
     {
+        size_t stackSize;
+        cudaDeviceGetLimit(&stackSize, cudaLimitStackSize);
+        printf("Current per-thread stack size: %zu bytes\n", stackSize);
+
+        size_t newSize = 8192;  // example: 8 KB
+        cudaDeviceSetLimit(cudaLimitStackSize, newSize); // TODO figure out good number, add to const_params.cuh
+
         int blockSize = N_RULES;
         int numBlocks = 512; // TODO tune. Can this be num_nodes or something?
         kernel_eqsat_match_rules<<<numBlocks, blockSize>>>(solver);

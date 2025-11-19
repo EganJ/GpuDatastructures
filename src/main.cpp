@@ -104,7 +104,11 @@ int main()
     rule_nodes = std::move(compressed_rule_nodes);
     rules = std::move(compressed_rules);
   }
-  std::cout << "Compressed to " << rules.size() << " rules with " << rule_nodes.size() << " total nodes." << std::endl;
+  for (int i = 0; i < rules.size(); ++i)
+  {
+    // if (rule_nodes[rules[i].lhs].name == FuncName::Var)
+    std::cout << " Rule " << i << ": " << printExpression(rule_nodes, rules[i].lhs) << " -> " << printExpression(rule_nodes, rules[i].rhs) << std::endl;
+  }
 
   // Parse FPCore expressions
   std::string benchdir = "bench/";
@@ -139,7 +143,7 @@ int main()
   }
 
   std::vector<int> adjusted_indices;
-  gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
-
+  gpuds::eqsat::EqSatSolver* solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
+  gpuds::eqsat::launch_eqsat_match_rules(solver);
   return 0;
 }

@@ -39,7 +39,6 @@ namespace gpuds::eqsat
         RuleMatch rule_matches[MAX_RULE_MATCHES]; // large.
     };
 
-    __global__ void kernel_eqsat_match_rules(EqSatSolver *solver);
     void launch_eqsat_match_rules(EqSatSolver *solver);
 
     __host__ void initialize_eqsat_memory();
