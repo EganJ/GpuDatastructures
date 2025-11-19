@@ -365,7 +365,6 @@ lead to different
             allocation_end = min(allocation_end, N_LOCAL_MATCH_BUFF);
             for (int i = allocation_start; i < allocation_end; i++)
             {
-                printf("matched rule %d to node %d\n", threadIdx.x, node_idx);
                 local_matches[i].lhs_class_id = eclass_idx;
                 local_matches[i].rhs_root = my_rule.rhs;
                 for (int j = 0; j < MAX_RULE_TERMS; j++)
@@ -401,7 +400,6 @@ lead to different
     {
         size_t stackSize;
         cudaDeviceGetLimit(&stackSize, cudaLimitStackSize);
-        printf("Current per-thread stack size: %zu bytes\n", stackSize);
 
         size_t newSize = 8192;  // example: 8 KB
         cudaDeviceSetLimit(cudaLimitStackSize, newSize); // TODO figure out good number, add to const_params.cuh

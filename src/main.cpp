@@ -104,11 +104,6 @@ int main()
     rule_nodes = std::move(compressed_rule_nodes);
     rules = std::move(compressed_rules);
   }
-  for (int i = 0; i < rules.size(); ++i)
-  {
-    // if (rule_nodes[rules[i].lhs].name == FuncName::Var)
-    std::cout << " Rule " << i << ": " << printExpression(rule_nodes, rules[i].lhs) << " -> " << printExpression(rule_nodes, rules[i].rhs) << std::endl;
-  }
 
   // Parse FPCore expressions
   std::string benchdir = "bench/";
