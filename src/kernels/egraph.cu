@@ -1,5 +1,6 @@
 #include "egraph.cuh"
 #include "const_params.cuh"
+#include <stdio.h>
 
 __global__ void initialize_empty_lists(EGraph *egraph)
 {
@@ -39,9 +40,10 @@ __global__ void initialize_class_to_nodes_list_values(EGraph *egraph)
     int end_class = min(egraph->num_classes, start_class + blocks_per_thread);
     for (int class_id = start_class + 1; class_id < end_class + 1; class_id++)
     {
-        int idx_to_listnode = (class_id - 1) * blocks_per_thread;
+        int idx_to_listnode = (class_id - 1) * single_int_block;
         ListNode *link = (ListNode *)(&egraph->list_space[idx_to_listnode]);
-        link->block_size = sizeof(int);
+        printf("idx is %d\n", idx_to_listnode);
+        link->block_size = (unsigned)(sizeof(int));
         link->next_node = NULL_ID;
         ((int *)link->data)[0] = class_id - 1; // Nodes start at 0, classes at 1.
         addToList(&egraph->class_to_nodes[class_id], link);
