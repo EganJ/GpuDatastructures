@@ -51,7 +51,7 @@ struct EGraph
 
     // Union-find structure to manage classes
     int class_ids[MAX_CLASSES + 1]; // +1 because 0 is discarded by unionfind
-    ClassesToMerge[MAX_MERGE_LIST_SIZE] classes_to_merge;
+    ClassesToMerge classes_to_merge[MAX_MERGE_LIST_SIZE];
     int classes_to_merge_count;
 
     BlockedList class_to_nodes[MAX_CLASSES + 1];
@@ -106,27 +106,7 @@ struct EGraph
      */
     __device__ bool insertNode(const FuncNode &node, int class_id, int &out_node_id);
 
-    __device__ void stageMergeClasses(int class1, int class2)
-    {
-        int lesser;
-        int greater;
-
-        if (class1 < class2)
-        {
-            lesser = class1;
-            greater = class2;
-        }
-        else
-        {
-            lesser = class2;
-            greater = class1;
-        }
-
-        int spot = atomicAdd(&(this->classes_to_merge_count), 1);
-        ClassesToMerge* m = (ClassesToMerge*) (&this->classes_to_merge[spot]);
-        m->firstClassID = lesser;
-        m->secondClassID = greater;
-    }
+    __device__ void stageMergeClasses(int class1, int class2);
 };
 
 __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &host_nodes,

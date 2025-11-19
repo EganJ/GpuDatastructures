@@ -164,3 +164,25 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     // not see nodes they should.
     return true;
 }
+
+ __device__ void EGraph::stageMergeClasses(int class1, int class2)
+{
+    int lesser;
+    int greater;
+
+    if (class1 < class2)
+    {
+        lesser = class1;
+        greater = class2;
+    }
+    else
+    {
+        lesser = class2;
+        greater = class1;
+    }
+
+    int spot = atomicAdd(&(this->classes_to_merge_count), 1);
+    ClassesToMerge* m = (ClassesToMerge*) (&this->classes_to_merge[spot]);
+    m->firstClassID = lesser;
+    m->secondClassID = greater;
+}
