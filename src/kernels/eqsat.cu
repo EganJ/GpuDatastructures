@@ -485,15 +485,10 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
         // Need to insert the root node into the matched LHS class.
         bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, rhs_eclass);
         // TODO subsequent steps?
-
-        if (!inserted && rhs_eclass != match.lhs_class_id) 
-            solver->egraph.stageMergeClasses(match.lhs_class_id, rhs_eclass);
-        // else, do nothing. node is junk.
-
-        // TO DONE if inserted = false, somebody else won the race and also need to go down the merge path.
-        // (unless the one who won the race (rhs_eclass) is already the same as lhs_class_id)
     }
-    else if (rhs_eclass != match.lhs_class_id)
+    
+    // If after inserting/looking up we find that our node is in a different class,
+    if (rhs_eclass != match.lhs_class_id)
     {
         // TO DONE merge the classes / mark them for merging later.
         solver->egraph.stageMergeClasses(match.lhs_class_id, rhs_eclass);
