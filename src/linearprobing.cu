@@ -29,7 +29,7 @@ KeyValue* create_hashtable()
 }
 
 // Insert the key/values in kvs into the hashtable
-__global__ void gpu_hashtable_insert(KeyValue* hashtable, const KeyValue* kvs, unsigned int numkvs)
+__global__ void gpu_hashtable_insert(KeyValue* hashtable, const KeyValue* kvs, unsigned int numkvs, Enode* enodes)
 {
     unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
     if (threadid < numkvs)
@@ -43,7 +43,6 @@ __global__ void gpu_hashtable_insert(KeyValue* hashtable, const KeyValue* kvs, u
             uint32_t prev = atomicCAS(&hashtable[slot].key, kEmpty, key);
             if (prev == kEmpty || prev == key)
             {
-                printf("added %d to %d\n", value, slot);
                 hashtable[slot].value = value;
                 return;
             }
@@ -53,6 +52,29 @@ __global__ void gpu_hashtable_insert(KeyValue* hashtable, const KeyValue* kvs, u
     }
 }
  
+// Insert the key/values in kvs into the hashtable
+__global__ void gpu_hashtable_lookup(KeyValue* hashtable, const KeyValue* kvs, unsigned int numkvs, Enode* enodes)
+{
+    unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
+    if (threadid < numkvs)
+    {
+        uint32_t key = kvs[threadid].key;
+        uint32_t value = kvs[threadid].value;
+        uint32_t slot = hash(key);
+
+        while (true)
+        {
+            uint32_t prev = atomicCAS(&hashtable[slot].key, kEmpty, key);
+            if (prev == kEmpty || prev == key)
+            {
+                hashtable[slot].value = value;
+                return;
+            }
+
+            slot = (slot + 1) & (kHashTableCapacity-1);
+        }
+    }
+}
 
 
 // Lookup keys in the hashtable, and return the values
@@ -64,6 +86,7 @@ __global__ void gpu_hashtable_lookup(KeyValue* hashtable, KeyValue* kvs, unsigne
         uint32_t key = kvs[threadid].key;
         uint32_t slot = hash(key);
 
+        magic_function_value_to_key
         while (true)
         {
             if (hashtable[slot].key == key)
@@ -96,7 +119,8 @@ __global__ void gpu_hashtable_delete(KeyValue* hashtable, const KeyValue* kvs, u
         {
             if (hashtable[slot].key == key)
             {
-                hashtable[slot].value = kEmpty;
+                while(atomicCAS(&hashtable[slot].key, key, kWasPresentButDeleted) == key){
+                }
                 return;
             }
             if (hashtable[slot].key == kEmpty)
@@ -138,8 +162,8 @@ void insert_hashtable(KeyValue* pHashTable, const KeyValue* kvs, uint32_t num_kv
 
     // Have CUDA calculate the thread block size
     int mingridsize;
-    int threadblocksize = 64;
-    // cudaOccupancyMaxPotentialBlockSize(&mingridsize, &threadblocksize, gpu_hashtable_insert, 0,0);
+    int threadblocksize;
+    cudaOccupancyMaxPotentialBlockSize(&mingridsize, &threadblocksize, gpu_hashtable_insert, 0,0);
 
     // Create events for GPU timing
     cudaEvent_t start, stop;
@@ -156,13 +180,14 @@ void insert_hashtable(KeyValue* pHashTable, const KeyValue* kvs, uint32_t num_kv
 
     cudaEventSynchronize(stop);
 
-    KeyValue* my_hash_map = (KeyValue*) malloc(sizeof(KeyValue) * num_kvs);
-    cudaError_t err = cudaMemcpy(my_hash_map, pHashTable, sizeof(KeyValue) * num_kvs, cudaMemcpyDeviceToHost);
+    if (kDebug){
+        KeyValue* my_hash_map = (KeyValue*) malloc(sizeof(KeyValue) * kHashTableCapacity);
+        cudaError_t err = cudaMemcpy(my_hash_map, pHashTable, sizeof(KeyValue) * kHashTableCapacity, cudaMemcpyDeviceToHost);
 
-    cudaDeviceSynchronize();
-    if (err != cudaSuccess){
-        printf(" Failed to read the memory back.");
-    }
+        cudaDeviceSynchronize();
+        if (err != cudaSuccess){
+            printf(" Failed to read the memory back.");
+        }
 
     printf("num kvs: %d\n", num_kvs);
     for (int j = 0; j < num_kvs; j++) {
@@ -174,7 +199,7 @@ void insert_hashtable(KeyValue* pHashTable, const KeyValue* kvs, uint32_t num_kv
     int num_missing_keys = 0;
     for (int i = 0; i < num_kvs; i++){
         bool this_is_present = false;
-        for (int j = 0; j < num_kvs; j++){
+        for (int j = 0; j < kHashTableCapacity; j++){
             if (my_hash_map[j].key == kvs[i].key){
                 this_is_present = true;
             }
@@ -187,6 +212,9 @@ void insert_hashtable(KeyValue* pHashTable, const KeyValue* kvs, uint32_t num_kv
         }
     }
     printf(" All of the keys are present in the hash map after calling bulk insert? %d\n, We are missing %d out of %d keys\n", all_present, num_missing_keys, num_kvs);
+
+    }
+
 
 
     float milliseconds = 0;
@@ -224,6 +252,31 @@ void delete_hashtable(KeyValue* pHashTable, const KeyValue* kvs, uint32_t num_kv
     cudaEventRecord(stop);
 
     cudaEventSynchronize(stop);
+
+    if (kDebug){
+        KeyValue* my_hash_map = (KeyValue*) malloc(sizeof(KeyValue) * kHashTableCapacity);
+        cudaError_t err = cudaMemcpy(my_hash_map, pHashTable, sizeof(KeyValue) * kHashTableCapacity, cudaMemcpyDeviceToHost);
+
+        cudaDeviceSynchronize();
+        if (err != cudaSuccess){
+            printf(" Failed to read the memory back.");
+        }
+
+        for (int i = 0; i < num_kvs; i++){
+            bool found = false;
+
+            for (int j = 0; j < kHashTableCapacity; j++){
+                if (my_hash_map[j].key == kvs[i].key){
+                    found = true;
+                    printf(" Key: %d found at position %d in hash map \n", kvs[i].key, j);
+                }
+            }
+            if (found){
+                printf(" The key %d was not deleted.\n", kvs[i].key);
+            }
+        }
+    }
+
 
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);

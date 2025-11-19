@@ -7,12 +7,14 @@ struct KeyValue
 };
 
 // const uint32_t kHashTableCapacity = 128 * 1024 * 1024;
-const uint32_t kHashTableCapacity = 64;
+const uint32_t kHashTableCapacity = 128*128*128;
+const bool kDebug = false;
 
 
 const uint32_t kNumKeyValues = kHashTableCapacity / 2;
 
 const uint32_t kEmpty = 0xffffffff;
+const uint32_t kWasPresentButDeleted = kEmpty - 1;
 
 KeyValue* create_hashtable();
 
