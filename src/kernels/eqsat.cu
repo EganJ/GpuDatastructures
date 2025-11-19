@@ -369,7 +369,7 @@ lead to different
             {
                 local_matches[i].lhs_class_id = eclass_idx;
                 local_matches[i].rhs_root = my_rule.rhs;
-                for (int j = 0; j < MAX_RULE_TERMS; j++)
+                for (int j = 0; j < MAX_RULE_VARS; j++)
                     local_matches[i].var_bindings[j] = found_matches.var_binds[i - allocation_start].bindings[j];
             }
         }
