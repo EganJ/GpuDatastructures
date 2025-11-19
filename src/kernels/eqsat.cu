@@ -13,45 +13,31 @@ using namespace gpuds::eqsat;
 namespace gpuds::eqsat
 {
     __device__ Ruleset global_ruleset;        
-    Ruleset temp_ruleset;
-
 
     /**
      * Host-side code to initialize memory structures needed for eqsat.
      */
     __host__ void initialize_ruleset_on_device(std::vector<FuncNode> &rule_nodes_host, std::vector<Rule> &rules_host)
     {   
-        printf("%d\n", rule_nodes_host.size() * sizeof(FuncNode));
-        printf("%d rules and %d nodes\n", rules_host.size(), rule_nodes_host.size());
         assert(rule_nodes_host.size() <= MAX_RULESET_TERMS);
         assert(rules_host.size() <= N_RULES);
 
-        memcpy(&temp_ruleset.rule_nodes[0], rule_nodes_host.data(), rule_nodes_host.size() * sizeof(FuncNode));
-        memcpy(&temp_ruleset.rules[0], rules_host.data(), rules_host.size() * sizeof(Rule));
-        printf("Copied %d rules\n", rules_host.size());
+        // rule_nodes_host to global_ruleset.rule_nodes (device)
         cudaMemcpyToSymbol(
             global_ruleset,
-            &temp_ruleset,
-            sizeof(Ruleset),
-            0,
+            rule_nodes_host.data(),
+            rule_nodes_host.size() * sizeof(FuncNode),
+            offsetof(Ruleset, rule_nodes),
             cudaMemcpyHostToDevice);
 
-        // // rule_nodes_host to global_ruleset.rule_nodes (device)
-        // cudaMemcpyToSymbol(
-        //     global_ruleset,
-        //     rule_nodes_host.data(),
-        //     rule_nodes_host.size() * sizeof(FuncNode),
-        //     offsetof(Ruleset, rule_nodes),
-        //     cudaMemcpyHostToDevice);
-
-        // // rules_host to global_ruleset.rules (device)
-        // cudaMemcpyToSymbol(
-        //     global_ruleset,
-        //     rules_host.data(),
-        //     // rules_host.size() * sizeof(Rule),
-        //     100,
-        //     offsetof(Ruleset, rules),
-        //     cudaMemcpyHostToDevice);
+        // rules_host to global_ruleset.rules (device)
+        cudaMemcpyToSymbol(
+            global_ruleset,
+            rules_host.data(),
+            // rules_host.size() * sizeof(Rule),
+            100,
+            offsetof(Ruleset, rules),
+            cudaMemcpyHostToDevice);
     }
 
     __host__ void initialize_eqsat_memory()
