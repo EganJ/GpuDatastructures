@@ -124,6 +124,9 @@ __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &hos
     cudaDeviceSynchronize();
 }
 
+/**
+ * Should not be done concurrently with anything that accesses the member lists of the eclasses!
+ */
 __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_node_id)
 {
     // Allocate new nodespace.
@@ -144,16 +147,20 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     // Attempt to insert. If failed because of duplicate, mark changes as discarded.
     int existing_node_id = -1;
     bool inserted = hashcons.insert(node, node_id, existing_node_id);
+
     if (!inserted)
     {
         // Discard changes
         // Cannot decrement num_nodes safely, so just leave the node unused.
         node_to_class[node_id] = -1; // mark as deleted
+        node_space[node_id].name = FuncName::Unset;
         out_node_id = existing_node_id;
         return false;
     }
     out_node_id = node_id;
 
-    // TODO!!! Add to class_to_nodes list
+    // TODO!!! Add to class_to_nodes list. This can be done after we know the insert succeeded, 
+    // means that other classes cannot access the class_to_nodes lists concurrently or they may
+    // not see nodes they should.
     return true;
 }
