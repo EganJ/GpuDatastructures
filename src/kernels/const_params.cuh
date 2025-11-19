@@ -15,6 +15,7 @@ const int MAX_RULE_TERMS = 8;
 // Maximum number of supported equivalence classes, counting
 // ones that have been merged away.
 const int MAX_CLASSES = 10000;
+const int MAX_MERGE_LIST_SIZE = 1000;
 // Maximum number of nodes in the e-graph.
 const int MAX_NODES = 50000;
 const int MAX_LIST_SPACE = 2 * MAX_NODES * sizeof(int) / sizeof(char);

@@ -486,7 +486,7 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
         bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, rhs_eclass);
         // TODO subsequent steps?
 
-        if (!inserted) 
+        if (!inserted && rhs_eclass != match.lhs_class_id) 
             solver->egraph.stageMergeClasses(match.lhs_class_id, rhs_eclass);
         // else, do nothing. node is junk.
 
