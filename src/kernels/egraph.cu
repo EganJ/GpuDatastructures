@@ -119,3 +119,35 @@ __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &hos
     kernel_initialize_egraph(egraph, compressed_nodes.size());
     cudaDeviceSynchronize();
 }
+
+__device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_node_id)
+{
+    // Allocate new nodespace.
+    int node_id = atomicAdd(&num_nodes, 1);
+    node_space[node_id] = node;
+
+    if (class_id == -1)
+    {
+        // Create new class
+        class_id = atomicAdd(&num_classes, 1) + 1; // +1 because class 0 is unused
+    }
+    else
+    {
+        class_id = resolveClass(class_id);
+    }
+    node_to_class[node_id] = class_id;
+
+    // Attempt to insert. If failed because of duplicate, mark changes as discarded.
+    int existing_node_id = -1;
+    bool inserted = mock_hashcons.insert_lookup(node, node_id, existing_node_id);
+    if (!inserted)
+    {
+        // Discard changes
+        // Cannot decrement num_nodes safely, so just leave the node unused.
+        node_to_class[node_id] = -1; // mark as deleted
+        out_node_id = existing_node_id;
+        return false;
+    }
+    out_node_id = node_id;
+    return true;
+}

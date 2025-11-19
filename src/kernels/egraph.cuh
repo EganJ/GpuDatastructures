@@ -11,6 +11,27 @@
 #include "linkedlist.cuh"
 #include "const_params.cuh"
 
+// TODO replace this with a real implementation.
+struct MockHashTable
+{
+    // Concurrent with deletes and inserts,
+    // but may of course return a stale result.
+    // Returns the node_id of the found node, or -1 if not found.
+    __device__ int lookup(const FuncNode &node) { return 0; }
+
+    /**
+     * Psuedocode for a lookup that commutes only with insert that doesn't need atomics:
+     */
+
+    // Inserts the node. Concurrent with lookups but not with deletes.
+    // Concurrent with other inserts: may not insert duplicates, and if
+    // a duplicate is found, returns false without inserting. In such
+    // a case, out_node_id is set to the existing node's ID.
+    __device__ bool insert_lookup(const FuncNode &node, int node_id, int &out_node_id) { return false; }
+
+    // Deletes the node. Concurrent with lookups but not with inserts.
+    __device__ void remove(const FuncNode &node) {}
+};
 
 struct EGraph
 {
@@ -33,6 +54,7 @@ struct EGraph
     char list_space[MAX_LIST_SPACE];
 
     // TODO hashconsing structure
+    MockHashTable mock_hashcons;
 
     __device__ FuncNode &getNode(int node_id)
     {
@@ -59,6 +81,20 @@ struct EGraph
     {
         return resolveClassReadOnly(node_to_class[node_id]);
     }
+
+    /**
+     * Inserts the given node into the e-graph. If an equivalent node already exists (or 
+     * is concurrently inserted), output its node and class IDs instead, otherwise output
+     * the newly inserted node and class IDs. Returns whether a new node was inserted.
+     * @param node The node to insert.
+     * @param class_id The class ID to insert the node into (only relevant for non-vars/consts).
+     * @param out_node_id Output parameter for the node ID of the inserted/found node.
+     * @param out_class_id Output parameter for the class ID of the inserted/found node.
+     * 
+     * Warning: frequent calls to this with duplicates may exhaust the nodespace. Should be filtered
+     * by a prior lookup, even if that lookup may be stale.
+     */
+    __device__ bool insertNode(const FuncNode &node, int class_id, int &out_node_id);
 };
 
 __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &host_nodes,

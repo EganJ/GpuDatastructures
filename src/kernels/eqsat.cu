@@ -12,13 +12,13 @@ using namespace gpuds;
 using namespace gpuds::eqsat;
 namespace gpuds::eqsat
 {
-    __constant__ Ruleset global_ruleset;        
+    __constant__ Ruleset global_ruleset;
 
     /**
      * Host-side code to initialize memory structures needed for eqsat.
      */
     __host__ void initialize_ruleset_on_device(std::vector<FuncNode> &rule_nodes_host, std::vector<Rule> &rules_host)
-    {   
+    {
         assert(rule_nodes_host.size() <= MAX_RULESET_TERMS);
         assert(rules_host.size() <= N_RULES);
 
@@ -355,7 +355,9 @@ lead to different
                 vb.bound = true;
                 vb.bindings[my_rule_node.args[0]] = eclass_idx;
                 found_matches.add_binding(vb);
-            } else {
+            }
+            else
+            {
                 find_matches_enode(solver->egraph, my_rule_node, node_idx, initial_match, found_matches);
             }
 
@@ -401,12 +403,104 @@ lead to different
         size_t stackSize;
         cudaDeviceGetLimit(&stackSize, cudaLimitStackSize);
 
-        size_t newSize = 8192;  // example: 8 KB
+        size_t newSize = 8192;                           // example: 8 KB
         cudaDeviceSetLimit(cudaLimitStackSize, newSize); // TODO figure out good number, add to const_params.cuh
 
         int blockSize = N_RULES;
         int numBlocks = 512; // TODO tune. Can this be num_nodes or something?
         kernel_eqsat_match_rules<<<numBlocks, blockSize>>>(solver);
         cudaDeviceSynchronize();
+    }
+}
+
+// ################################################################
+// # Step 2: Apply matched rules to egraph
+// ################################################################
+
+/**
+ * Looks up the eclass index for the node with the given idx in the rule nodespace.
+ * Will recusively lookup or insert child nodes as needed, but will not insert the
+ * parent node itself. Returns -1 if not found.
+ *
+ * FuncNode &node_out: Output parameter that will not necessarily be inserted in the graph
+ * but will always point to children eclasses present in the egraph.
+ */
+__device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx, VarBind &var_bindings, FuncNode &node_out)
+{
+    node_out = global_ruleset.rule_nodes[rhs_node_idx];
+    if (node_out.name == FuncName::Var)
+    {
+        return var_bindings.bindings[node_out.args[0]]; // Already bound by match.
+    }
+    if (node_out.name != FuncName::Const)
+    {
+        // rhs_node currently is a copy of the node in the rule nodespace, and
+        // points to other nodes in the nodespace. Promote it to point to eclasses
+        // in the egraph instead.
+        int argc = getFuncArgCount(node_out.name);
+        bool all_children_found = true;
+        for (int i = 0; i < argc; i++)
+        {
+            FuncNode child_node;
+            int child_eclass = lookup_and_insert_children(solver, node_out.args[i], var_bindings, child_node);
+            if (child_eclass == -1)
+            {
+                all_children_found = false;
+                // Insert child
+                bool inserted = solver->egraph.insertNode(child_node, -1, child_eclass);
+            }
+            node_out.args[i] = child_eclass;
+        }
+        if (!all_children_found)
+        {
+            return -1; // Cannot possibly find this node if children were missing.
+            // (Well, we can if another thread inserts it in the meantime, but that is handled during the
+            // insertion step.)
+        }
+    }
+    // At this point we have eliminated Vars and node_out should contain the right opcode and eclass-ids.
+    // Try to look it up in the egraph.
+    int found_node = solver->egraph.mock_hashcons.lookup(node_out);
+    if (found_node == -1)
+    {
+        return -1;
+    }
+    return solver->egraph.resolveClassReadOnly(solver->egraph.node_to_class[found_node]);
+}
+
+__device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
+{
+    VarBind var_bindings;
+    var_bindings.bound = true;
+    for (int i = 0; i < MAX_RULE_VARS; i++)
+    {
+        var_bindings.bindings[i] = match.var_bindings[i];
+    }
+
+    FuncNode rhs_root_node; // Root after promoting children to eclasses.
+    int rhs_eclass = lookup_and_insert_children(solver, match.rhs_root, var_bindings, rhs_root_node);
+    if (rhs_eclass == -1)
+    {
+        // Need to insert the root node into the matched LHS class.
+        bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, rhs_eclass);
+    }
+    else if (rhs_eclass != match.lhs_class_id)
+    {
+        // TODO merge the classes / mark them for merging later.
+    }
+}
+
+__global__ void kernel_eqsat_apply_rules(EqSatSolver *solver)
+{
+    int n_matches = solver->n_rule_matches;
+    int matches_per_thread = (n_matches + blockDim.x * gridDim.x - 1) / (blockDim.x * gridDim.x);
+
+    int start_match = (blockIdx.x * blockDim.x + threadIdx.x) * matches_per_thread;
+    int end_match = min(n_matches, start_match + matches_per_thread);
+
+    for (int match_idx = start_match; match_idx < end_match; match_idx++)
+    {
+        RuleMatch match = solver->rule_matches[match_idx];
+        apply_match(solver, match);
     }
 }
