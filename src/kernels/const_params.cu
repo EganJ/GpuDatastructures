@@ -1,4 +1,5 @@
 #include "const_params.cuh"
+#include "eqsat.cuh"
 
 __constant__ char func_arg_counts[sizeof(func_operand_count) / sizeof(func_operand_count[0])];
 

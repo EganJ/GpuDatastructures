@@ -2,6 +2,8 @@
 #define GPUDS_KERNELS_LINKEDLIST_CUH
 
 #include <assert.h>
+#include <cuda.h>
+#include <cuda_runtime.h>
 
 const unsigned NULL_ID = std::numeric_limits<unsigned>::max();
 
@@ -31,17 +33,7 @@ struct BlockedListBuffer
         return &buffer_data[idx];
     }
 
-    __device__ inline ListNode *allocateBlock(unsigned block_size_char)
-    {
-        int alloc_size = sizeof(ListNode) + block_size_char;
-        auto alloc_end = atomicAdd(&buffer_allocated, alloc_size);
-        assert(alloc_end < buffer_size);
-        auto alloc_start = alloc_end - alloc_size;
-        auto ln = (ListNode *)index(alloc_start);
-        ln->block_size = block_size_char;
-        ln->next_node = NULL_ID;
-        return ln;
-    }
+    __device__  ListNode *allocateBlock(unsigned block_size_char);
 };
 
 /**

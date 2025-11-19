@@ -8,7 +8,7 @@
 // Number of rules in the rules list, exact.
 const int N_RULES = 301;
 // Maximum number of terms across all rules.
-const int MAX_RULESET_TERMS = 3000;
+const int MAX_RULESET_TERMS = 9337;
 const int MAX_RULE_TERMS = 8;
 
 // Made-up limits for now

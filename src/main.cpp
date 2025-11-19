@@ -4,7 +4,7 @@
 
 #include "datastructures.h"
 #include "parser.h"
-
+#include "eqsat.h"
 
 void testUnionFindSmall()
 {
@@ -88,32 +88,16 @@ int main()
   // testUnionFindSmall();
   // testUnionFindLarge();
 
+  // Parse rules
   std::ifstream rulefile("rules.txt");
  
   std::vector<FuncNode> nodes{};
   std::vector<Rule> rules{};
   parseRuleFile(rulefile, nodes, rules);
-  std::cout << "Parsed " << rules.size() << " rules with " << nodes.size() << " function nodes." << std::endl;
-  std::cout << "Head:" << std::endl;
-  for (int i = 0; i < std::min(5, (int)rules.size()); ++i)
-  {
-    Rule &r = rules[i];
-    std::cout << "Rule " << r.id << ": " << printExpression(nodes, r.lhs) << "  -->  " << printExpression(nodes, r.rhs) << std::endl;
-  }
-  std::cout << "Tail:" << std::endl;
-  for (int i = std::max(0, (int)rules.size() - 5); i < rules.size(); ++i)
-  {
-    Rule &r = rules[i];
-    std::cout << "Rule " << r.id << ": " << printExpression(nodes, r.lhs) << "  -->  " << printExpression(nodes, r.rhs) << std::endl;
-  }
+
 
   // Parse FPCore expressions
-  // std::ifstream fpcorefile("bench/graphics/lod.fpcore");
-  // std::vector<uint32_t> expr_roots;
-  // parseFPCoreFile(fpcorefile, nodes, expr_roots);
   std::string benchdir = "bench/";
-  // Look through all directories and subdirectories of benchdir for .fpcore files
-  // For each .fpcore file, parse it and print the number of nodes parsed
   std::vector<uint32_t> expr_roots;
   try {
     for (const auto & entry : std::filesystem::recursive_directory_iterator(benchdir))
@@ -128,6 +112,12 @@ int main()
   } catch (std::filesystem::filesystem_error& e) {
       std::cout << "Filesystem error: " << e.what() << std::endl;
   }
+
+  // Construct datastructures on GPU and run matching kernels
+  gpuds::eqsat::initialize_eqsat_memory();
+  gpuds::eqsat::initialize_ruleset_on_device(nodes, rules);
   
+  // construct_eqsat_solver()
+
   return 0;
 }

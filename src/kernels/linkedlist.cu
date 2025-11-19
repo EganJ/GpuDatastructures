@@ -14,8 +14,17 @@
  * transferring data over different buffers (such as CPU -> GPU) will require fewer pointers to be rewritten.
  */
 
-
-
+__device__ ListNode *BlockedListBuffer::allocateBlock(unsigned block_size_char)
+{
+  int alloc_size = sizeof(ListNode) + block_size_char;
+  auto alloc_end = atomicAdd(&buffer_allocated, alloc_size);
+  assert(alloc_end < buffer_size);
+  auto alloc_start = alloc_end - alloc_size;
+  auto ln = (ListNode *)index(alloc_start);
+  ln->block_size = block_size_char;
+  ln->next_node = NULL_ID;
+  return ln;
+}
 
 /**
  * @brief Creates a new blocked linked list in a given buffer of memory.
@@ -57,7 +66,6 @@ __host__ __device__ unsigned getIndex(BlockedList *bl, ListNode *ln)
 {
   return (unsigned)((char *)ln - (char *)&(bl->buffer->buffer_data));
 }
-
 
 /**
  May return a stale value!
@@ -156,21 +164,21 @@ __device__ ListNode *newNode(BlockedListBuffer *blb, int size)
 }
 
 // Kernel to test creation of a bunch of list nodes
-__global__ void testListCreation(BlockedListBuffer* buffer)
+__global__ void testListCreation(BlockedListBuffer *buffer)
 {
-  ListNode* ln = newNode(buffer, 4);
+  ListNode *ln = newNode(buffer, 4);
 }
 
 // Elements in the test
 #define TEST_COUNT 100
 
 // Tests making a bunch of lists and concatenating them all together
-__global__ void testListMegaConcat(BlockedListBuffer* buffer)
+__global__ void testListMegaConcat(BlockedListBuffer *buffer)
 {
   __shared__ BlockedList lists[TEST_COUNT];
 
   // Everyone makes their own list node
-  ListNode* ln = newNode(buffer, 4);
+  ListNode *ln = newNode(buffer, 4);
   ln->data[0] = threadIdx.x;
 
   // Everyone makes their own list with that node, saves in shared memory
@@ -190,7 +198,7 @@ void testListMegaConcatOnHost()
   printf("begin\n");
 
   // Create a big enough buffer
-  BlockedListBuffer* buffer;
+  BlockedListBuffer *buffer;
   int size = 1000000;
   cudaMalloc(&buffer, size);
 
@@ -199,7 +207,7 @@ void testListMegaConcatOnHost()
 
   // Get the data back
   cudaDeviceSynchronize();
-  BlockedListBuffer* bufferOnHost = (BlockedListBuffer*) malloc(size);
+  BlockedListBuffer *bufferOnHost = (BlockedListBuffer *)malloc(size);
   cudaMemcpy(bufferOnHost, buffer, size, cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
 
@@ -207,16 +215,16 @@ void testListMegaConcatOnHost()
   int start = -1;
   for (int i = 1; i < TEST_COUNT * 3; i += 3)
   {
-    if (((int*) bufferOnHost)[i + 2] == 0)
+    if (((int *)bufferOnHost)[i + 2] == 0)
       start = i;
 
-    printf("%d | %d %d %d \n", i * 4 - 4, ((int*) bufferOnHost)[i], ((int*) bufferOnHost)[i + 1], ((int*) bufferOnHost)[i + 2]);
+    printf("%d | %d %d %d \n", i * 4 - 4, ((int *)bufferOnHost)[i], ((int *)bufferOnHost)[i + 1], ((int *)bufferOnHost)[i + 2]);
   }
   printf("\n");
 
   // Create a host-side list starting at element 0...
   BlockedList bl = newBlockedList(bufferOnHost);
-  bl.start_pointer = getIndex(&bl, (ListNode*) &((int*) bufferOnHost)[start]);
+  bl.start_pointer = getIndex(&bl, (ListNode *)&((int *)bufferOnHost)[start]);
   char covered[TEST_COUNT];
   for (int i = 0; i < TEST_COUNT; i++)
     covered[i] = 0;
@@ -225,7 +233,7 @@ void testListMegaConcatOnHost()
   int next;
   for (ListIterator<int> i = ListIterator<int>(&bl); i.next(&next);)
   {
-    printf("%d, ", next); 
+    printf("%d, ", next);
     covered[next]++;
   }
   printf("\n");

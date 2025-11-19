@@ -16,8 +16,6 @@ namespace gpuds::eqsat
         Rule rules[N_RULES];
         FuncNode rule_nodes[MAX_RULESET_TERMS];
     };
-    // TODO copy over rules, terms from parser
-    __constant__ Ruleset global_ruleset;
 
     // Contains the result of a single rule match.
     // Records which class had the LHS, the IDX of the
@@ -44,7 +42,10 @@ namespace gpuds::eqsat
     __global__ void kernel_eqsat_match_rules(EqSatSolver *solver);
     void launch_eqsat_match_rules(EqSatSolver *solver);
 
-    void initialize_eqsat_memory();
+    __host__ void initialize_eqsat_memory();
+
+    __host__ void initialize_ruleset_on_device(std::vector<FuncNode> &rule_nodes_host,
+                                               std::vector<Rule> &rules_host);
 
     /**
      * Constructs an EqSatSolver on the device and returns a pointer to it.
