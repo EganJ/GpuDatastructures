@@ -83,6 +83,8 @@ __global__ void set_num_classes_and_nodes(EGraph *egraph, int n_initial_nodes)
 {
     egraph->num_nodes = n_initial_nodes;
     egraph->num_classes = n_initial_nodes; // initially each node in its own class
+    // While we're here, initialize the hashcons table
+    egraph->hashcons.parent_egraph = egraph;
 }
 
 // Steps that must be performed on the device
@@ -115,6 +117,8 @@ __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &hos
     cudaMemset(&egraph->class_ids[0], 0, sizeof(int) * (MAX_CLASSES + 1));
     cudaMemset(&egraph->list_space[0], 0, sizeof(char) * MAX_LIST_SPACE);
 
+    initialize_hashcons_memory(&egraph->hashcons);
+
     // Launch kernel to initialize egraph structures that we can't from host.
     kernel_initialize_egraph(egraph, compressed_nodes.size());
     cudaDeviceSynchronize();
@@ -139,7 +143,7 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
 
     // Attempt to insert. If failed because of duplicate, mark changes as discarded.
     int existing_node_id = -1;
-    bool inserted = mock_hashcons.insert_lookup(node, node_id, existing_node_id);
+    bool inserted = hashcons.insert(node, node_id, existing_node_id);
     if (!inserted)
     {
         // Discard changes
@@ -149,5 +153,7 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
         return false;
     }
     out_node_id = node_id;
+
+    // TODO!!! Add to class_to_nodes list
     return true;
 }

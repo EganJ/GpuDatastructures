@@ -10,6 +10,7 @@
 #include "unionfind.cuh"
 #include "linkedlist.cuh"
 #include "const_params.cuh"
+#include "linearprobing.h"
 
 // TODO replace this with a real implementation.
 struct MockHashTable
@@ -54,7 +55,7 @@ struct EGraph
     char list_space[MAX_LIST_SPACE];
 
     // TODO hashconsing structure
-    MockHashTable mock_hashcons;
+    HashTable hashcons; // TODO swap out mock_hashcons with this
 
     __device__ FuncNode &getNode(int node_id)
     {

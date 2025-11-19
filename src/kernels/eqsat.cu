@@ -460,7 +460,7 @@ __device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx,
     }
     // At this point we have eliminated Vars and node_out should contain the right opcode and eclass-ids.
     // Try to look it up in the egraph.
-    int found_node = solver->egraph.mock_hashcons.lookup(node_out);
+    int found_node = solver->egraph.hashcons.lookup(node_out);
     if (found_node == -1)
     {
         return -1;

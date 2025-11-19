@@ -1,31 +1,67 @@
 #pragma once
 
 #include <vector>
+#include "const_params.cuh"
+#include "../rules.h"
 
-struct KeyValue
+typedef int Value;
+typedef unsigned Hash;
+struct HashValue
 {
-    unsigned key;
-    unsigned value;
+    Hash hash;
+    Value value;
+
+    __device__ bool operator==(const HashValue &other) const
+    {
+        return hash == other.hash && value == other.value;
+    }
+};
+static_assert(sizeof(HashValue) == sizeof(unsigned long long));
+
+// Forward declaration so we can use it in HashTable methods
+class EGraph;
+
+struct HashTable
+{
+    // Hashes should be in range [0, kHashTableCapacity), so these sentinels are safe.
+    const static unsigned kSentinelUnused = 0xFFFFFFFF;
+    const static unsigned kSentinelDeleted = kSentinelUnused - 1;
+    const int kNotFound = -1;
+
+    EGraph *parent_egraph;
+    HashValue table[MAX_HASH_CAPACITY];
+
+    /**
+     * Looks up the key associated for the given value.
+     * TODO: needs access to the egraph to make sense
+     */
+    __device__ inline int valToKeyId(int val) { return val; } // identity for now
+    __device__ inline FuncNode valToKey(int val);
+
+    __device__ int computeHash(const FuncNode &node);
+
+    /**
+     * Looks up a (potentially stale) value for the given key, and
+     * returns it or -1 if not found. Concurrent with insertions and deletions.
+     */
+    __device__ int lookup(const FuncNode &node);
+
+    /**
+     *  Inserts the node. Concurrent with lookups but not with deletes.
+     * Concurrent with other inserts: may not insert duplicates, and if
+     * a duplicate is found, returns false without inserting. In such
+     * a case, out_node_id is set to the existing node's ID.
+     */
+    __device__ bool insert(const FuncNode &node, int value, int &old_value);
+
+    /**
+     * Marks the given node as deleted. Concurrent with lookups.
+     * Not concurrent with inserts.
+     */
+    __device__ void remove(const FuncNode &node);
+
+    // Helper to get the next index in the table, wrapping around.
+    __device__ static inline unsigned nextIdx(unsigned idx);
 };
 
-// const unsigned kHashTableCapacity = 128 * 1024 * 1024;
-const unsigned kHashTableCapacity = 128*128*128;
-const bool kDebug = false;
-
-
-const unsigned kNumKeyValues = kHashTableCapacity / 2;
-
-const unsigned kEmpty = 0xffffffff;
-const unsigned kWasPresentButDeleted = kEmpty - 1;
-
-KeyValue* create_hashtable();
-
-void insert_hashtable(KeyValue* hashtable, const KeyValue* kvs, unsigned num_kvs);
-
-void lookup_hashtable(KeyValue* hashtable, KeyValue* kvs, unsigned num_kvs);
-
-void delete_hashtable(KeyValue* hashtable, const KeyValue* kvs, unsigned num_kvs);
-
-std::vector<KeyValue> iterate_hashtable(KeyValue* hashtable);
-
-void destroy_hashtable(KeyValue* hashtable);
+__host__ void initialize_hashcons_memory(HashTable *hashcons);

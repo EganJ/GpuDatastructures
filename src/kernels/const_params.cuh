@@ -18,6 +18,7 @@ const int MAX_CLASSES = 10000;
 // Maximum number of nodes in the e-graph.
 const int MAX_NODES = 50000;
 const int MAX_LIST_SPACE = 2 * MAX_NODES * sizeof(int) / sizeof(char);
+const int MAX_HASH_CAPACITY = (int)(1.5 * MAX_NODES);
 
 // Parameters for the LHS matching phase
 const int N_LOCAL_MATCH_BUFF = 256; // Size of the shared-memory buffer for holding matches per block
