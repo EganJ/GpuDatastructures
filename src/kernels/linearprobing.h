@@ -3,6 +3,7 @@
 #include <vector>
 #include "const_params.cuh"
 #include "../rules.h"
+#include <cuda_runtime.h>
 
 typedef int Value;
 typedef unsigned Hash;

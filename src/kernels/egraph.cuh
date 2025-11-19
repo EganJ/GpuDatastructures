@@ -38,7 +38,7 @@ struct ClassesToMerge
 {
     int firstClassID;
     int secondClassID;
-}
+};
 
 struct EGraph
 {
@@ -54,7 +54,7 @@ struct EGraph
 
     BlockedList class_to_nodes[MAX_CLASSES + 1];
     BlockedList class_to_parents[MAX_CLASSES + 1];  
-    BlockedList staged_merges {&list_space_cursor, -1, -1};
+    BlockedList staged_merges {&list_space_cursor, (unsigned) -1, (unsigned) -1};
 
     // Keep these two contiguous! list_space must immediatly
     // follow list_space_cursor in memory.
@@ -107,7 +107,7 @@ struct EGraph
     __device__ void stageMergeClasses(int class1, int class2)
     {
         ListNode *ln = list_space_cursor.allocateBlock(sizeof(int) * 2);
-        ClassesToMerge* m = (ClassesToMerge*) ln.data;
+        ClassesToMerge* m = (ClassesToMerge*) &ln->data[0];
 
         int lesser;
         int greater;
@@ -123,9 +123,9 @@ struct EGraph
             greater = class1;
         }
 
-        m.firstClassID = lesser;
-        m.secondClassID = greater;
-        addToList(stagedMerges, ln);
+        m->firstClassID = lesser;
+        m->secondClassID = greater;
+        addToList(&staged_merges, ln);
     }
 };
 

@@ -479,7 +479,8 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
 
     FuncNode rhs_root_node; // Root after promoting children to eclasses.
     int rhs_eclass = lookup_and_insert_children(solver, match.rhs_root, var_bindings, rhs_root_node);
-    if (rhs_eclass == -1)
+    int NOT_FOUND = -1;
+    if (rhs_eclass == NOT_FOUND)
     {
         // Need to insert the root node into the matched LHS class.
         bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, rhs_eclass);

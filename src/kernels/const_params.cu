@@ -1,5 +1,6 @@
 #include "const_params.cuh"
 #include "eqsat.cuh"
+#include <cuda_runtime.h>
 
 __constant__ char func_arg_counts[sizeof(func_operand_count) / sizeof(func_operand_count[0])];
 
