@@ -34,6 +34,12 @@ struct MockHashTable
     __device__ void remove(const FuncNode &node) {}
 };
 
+struct ClassesToMerge
+{
+    int firstClassID;
+    int secondClassID;
+}
+
 struct EGraph
 {
     int num_classes = 0; // Counter for used class slots
@@ -47,7 +53,8 @@ struct EGraph
     int class_ids[MAX_CLASSES + 1]; // +1 because 0 is discarded by unionfind
 
     BlockedList class_to_nodes[MAX_CLASSES + 1];
-    BlockedList class_to_parents[MAX_CLASSES + 1];
+    BlockedList class_to_parents[MAX_CLASSES + 1];  
+    BlockedList staged_merges {&list_space_cursor, -1, -1};
 
     // Keep these two contiguous! list_space must immediatly
     // follow list_space_cursor in memory.
@@ -96,6 +103,30 @@ struct EGraph
      * by a prior lookup, even if that lookup may be stale.
      */
     __device__ bool insertNode(const FuncNode &node, int class_id, int &out_node_id);
+
+    __device__ void stageMergeClasses(int class1, int class2)
+    {
+        ListNode *ln = list_space_cursor.allocateBlock(sizeof(int) * 2);
+        ClassesToMerge* m = (ClassesToMerge*) ln.data;
+
+        int lesser;
+        int greater;
+
+        if (class1 < class2)
+        {
+            lesser = class1;
+            greater = class2;
+        }
+        else
+        {
+            lesser = class2;
+            greater = class1;
+        }
+
+        m.firstClassID = lesser;
+        m.secondClassID = greater;
+        addToList(stagedMerges, ln);
+    }
 };
 
 __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &host_nodes,

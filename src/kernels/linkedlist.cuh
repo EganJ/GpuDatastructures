@@ -65,6 +65,7 @@ __device__ unsigned resolveListEnd(BlockedListBuffer *start, unsigned block_idx)
 __device__ unsigned resolveListEnd(BlockedList *bl);
 
 __device__ void addToList(BlockedList *bl, ListNode *ln);
+
 __device__ BlockedList *concatLists(BlockedList *a, BlockedList *b);
 
 __device__ ListNode *newNode(BlockedListBuffer *buffer, unsigned block_size);
