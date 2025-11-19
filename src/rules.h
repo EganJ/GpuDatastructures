@@ -2,6 +2,8 @@
 #define EGGPU_RULES_H
 
 #include <cstdint>
+#include <vector>
+#include <map>
 
 enum FuncName
 {
@@ -105,5 +107,13 @@ struct Rule
 };
 
 unsigned char getOperandCount(FuncName n);
+
+void compress_nodespace(const std::vector<FuncNode> &nodes, const std::vector<int> &root_terms, std::vector<FuncNode> &out_nodes, std::vector<int> &out_roots);
+
+void compress_nodespace(const std::vector<FuncNode> &nodes, const std::vector<Rule> &in_rules,
+                        std::vector<FuncNode> &out_nodes, std::vector<Rule> &out_rules);
+int add_node_deduplicated(const std::vector<FuncNode> &original_memspace,
+                          std::vector<FuncNode> &new_namespace,
+                          std::map<int, int> &id_mappings, int original_id);
 
 #endif // EGGPU_RULES_H

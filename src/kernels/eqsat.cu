@@ -12,7 +12,7 @@ using namespace gpuds;
 using namespace gpuds::eqsat;
 namespace gpuds::eqsat
 {
-    __device__ Ruleset global_ruleset;        
+    __constant__ Ruleset global_ruleset;        
 
     /**
      * Host-side code to initialize memory structures needed for eqsat.

@@ -90,33 +90,47 @@ int main()
 
   // Parse rules
   std::ifstream rulefile("rules.txt");
- 
-  std::vector<FuncNode> nodes{};
-  std::vector<Rule> rules{};
-  parseRuleFile(rulefile, nodes, rules);
 
+  std::vector<FuncNode> rule_nodes{};
+  std::vector<Rule> rules{};
+  parseRuleFile(rulefile, rule_nodes, rules);
+  std::cout << "Parsed " << rules.size() << " rules with " << rule_nodes.size() << " uncompressed total nodes." << std::endl;
+  // Compress rules node space
+  {
+    std::vector<FuncNode> compressed_rule_nodes;
+    std::vector<Rule> compressed_rules;
+    compress_nodespace(rule_nodes, rules, compressed_rule_nodes, compressed_rules);
+    std::cout << "Compressed to " << compressed_rules.size() << " rules with " << compressed_rule_nodes.size() << " total nodes." << std::endl;
+    rule_nodes = std::move(compressed_rule_nodes);
+    rules = std::move(compressed_rules);
+  }
+  std::cout << "Compressed to " << rules.size() << " rules with " << rule_nodes.size() << " total nodes." << std::endl;
 
   // Parse FPCore expressions
   std::string benchdir = "bench/";
   std::vector<uint32_t> expr_roots;
-  try {
-    for (const auto & entry : std::filesystem::recursive_directory_iterator(benchdir))
+  std::vector<FuncNode> nodes;
+  try
+  {
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(benchdir))
     {
       if (entry.path().extension() == ".fpcore")
       {
-        std::cout << "Parsing FPCore file: " << entry.path() << std::endl;
+        // std::cout << "Parsing FPCore file: " << entry.path() << std::endl;
         std::ifstream fpcorefile(entry.path());
         parseFPCoreFile(fpcorefile, nodes, expr_roots);
       }
     }
-  } catch (std::filesystem::filesystem_error& e) {
-      std::cout << "Filesystem error: " << e.what() << std::endl;
+  }
+  catch (std::filesystem::filesystem_error &e)
+  {
+    std::cout << "Filesystem error: " << e.what() << std::endl;
   }
 
   // Construct datastructures on GPU and run matching kernels
   gpuds::eqsat::initialize_eqsat_memory();
-  gpuds::eqsat::initialize_ruleset_on_device(nodes, rules);
-  
+  gpuds::eqsat::initialize_ruleset_on_device(rule_nodes, rules);
+
   // construct_eqsat_solver()
 
   return 0;

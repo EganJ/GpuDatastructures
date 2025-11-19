@@ -1,67 +1,6 @@
 #include "egraph.cuh"
 #include "const_params.cuh"
 
-
-int add_node_deduplicated(const std::vector<FuncNode> &original_memspace,
-                          std::vector<FuncNode> &new_namespace,
-                          std::map<int, int> &id_mappings, int original_id)
-{
-    if (id_mappings.find(original_id) != id_mappings.end())
-    {
-        return id_mappings[original_id]; // already added
-    }
-
-    FuncNode node = original_memspace[original_id];
-    if (node.name != FuncName::Var || node.name != FuncName::Const)
-    {
-        int argc = getOperandCount(node.name);
-        for (int i = 0; i < argc; i++)
-        {
-            int child_original_id = node.args[i];
-            int child_new_id = add_node_deduplicated(original_memspace, new_namespace, id_mappings, child_original_id);
-            node.args[i] = child_new_id;
-        }
-    }
-
-    // Need to add this node only if its not already present!
-    bool present = false;
-    for (int i = 0; i < new_namespace.size(); i++)
-    {
-        const FuncNode &existing_node = new_namespace[i];
-        if (existing_node.name == node.name)
-        {
-            bool all_args_match = true;
-            int argc = getOperandCount(node.name);
-            for (int j = 0; j < argc; j++)
-            {
-                if (existing_node.args[j] != node.args[j])
-                {
-                    all_args_match = false;
-                    break;
-                }
-            }
-            if (all_args_match)
-            {
-                present = true;
-                id_mappings[original_id] = i;
-                break;
-            }
-        }
-    }
-
-    if (!present)
-    {
-        int new_id = new_namespace.size();
-        new_namespace.push_back(node);
-        id_mappings[original_id] = new_id;
-        return new_id;
-    }
-    else
-    {
-        return id_mappings[original_id];
-    }
-}
-
 __global__ void initialize_empty_lists(EGraph *egraph)
 {
     int n_threads = blockDim.x * gridDim.x;
@@ -156,18 +95,8 @@ __host__ void kernel_initialize_egraph(EGraph *egraph, int n_initial_nodes)
 __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &host_nodes,
                                 const std::vector<int> &roots, std::vector<int> &compressed_roots)
 {
-    std::map<int, int> id_to_compressed_id;
     std::vector<FuncNode> compressed_nodes;
-
-    // Build a subset of the nodes actually used in the e-graph, and
-    // ensure egraph invariants.
-
-    // TODO: currently expensive!
-    for (int root_id : roots)
-    {
-        add_node_deduplicated(host_nodes, compressed_nodes, id_to_compressed_id, root_id);
-        compressed_roots.push_back(id_to_compressed_id[root_id]);
-    }
+    compress_nodespace(host_nodes, roots, compressed_nodes, compressed_roots);
 
     std::vector<int> class_ids(compressed_nodes.size());
     for (int i = 0; i < class_ids.size(); i++)
