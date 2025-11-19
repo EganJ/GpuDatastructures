@@ -104,6 +104,85 @@ __global__ void gpu_hashtable_lookup(KeyValue* hashtable, KeyValue* kvs, unsigne
     }
 }
 
+__global__ void gpu_hashtable_operations(KeyValue* hashtable, KeyValue* kvs, flag* which_op_is_this_thread_doing, unsigned int num_kvs){
+
+    unsigned int threadid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (threadid < numkvs)
+    {
+        uint32_t key = kvs[threadid].key;
+        uint32_t slot = hash(key);
+
+        flag my_op = which_op_is_this_thread_doing[threadid];
+
+        if (my_op == INSERT){
+            \\ THE INSERT CODE
+        }
+        else if (my_op == LOOKUP){
+            \\ The lookup code.
+        }
+
+}
+
+__device__ lookup(HashTable* table, Key key) {
+    Hash hash = hashfn(key);
+    idx = hash;
+    while (true) {
+        HV = atomic_load(table[idx]);
+        if (H == hash) {
+            other_key = magic_val_to_key(V);
+            if other_key == key return V
+        }
+        idx++;
+    }
+}
+
+// Concurrent with lookup and insert, but NOT delete if we want unique inserts.
+__decvice__ insert(HashTable* table, Key key, Val val) {
+    Hash hash = hashfn(key);
+    idx = hash;
+    while (true) {
+        HV = atomic_load(table[idx]);
+        if (H == UsedButUnset or Empty) {
+            other_key = magic_val_to_key(V);
+            if (other_key != key){
+            item_to_emplace = (hash, val)
+            hv2 = atomicCAS(&table[idx], HV, item_to_emplace); 
+            if (hv2 == HV) return
+            } else {
+                // Duplicates, either do nothing or overwrite? Do nothing 
+                // works for our application
+                return
+            }
+        }
+        } else {
+            idx++;
+        }
+    }
+}
+
+
+// NO CONCURRENT DELETES AND INSERTS.
+__device__ delete(HashTable* table, Key key){
+
+    uint32_t hash = hashfn(key);
+    uint32_t idx = hash;
+    while (true) {
+        HV = atomic_load(table[idx]);
+        other_key = magic_val_to_key(V);
+        if (other_key != key){
+            idx++;
+            idx = idx % kHashTableCapacity;
+            continue;
+        } else if (H == kEmpty){
+            return; // Item is not in the hash table.
+        }
+        prev = atomicCAS(&table[idx], HV, UsedButUnset);
+        return
+    } 
+}
+
+
+
 // Delete each key in kvs from the hash table, if the key exists
 // A deleted key is left in the hash table, but its value is set to kEmpty
 // Deleted keys are not reused; once a key is assigned a slot, it never moves
