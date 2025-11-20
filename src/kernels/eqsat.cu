@@ -51,6 +51,44 @@ namespace gpuds::eqsat
             }
             printf("\n");
         }
+
+        printf("Parents by class:\n");
+        for (int class_id = 1; class_id < solver->egraph.num_classes + 1; class_id++)
+        {
+            int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
+            printf("Class %d (resolved %d): ", class_id, resolved_id);
+            BlockedList *parents = &solver->egraph.class_to_parents[class_id];
+            ListIterator<int> it(parents);
+            int parent_id;
+            while (it.next(&parent_id))
+            {
+                printf("%d(%d) ", parent_id, solver->egraph.resolveClassReadOnly(parent_id));
+            }
+            printf("\n");
+        }
+    }
+
+    __global__ void printgpustate_forcomputer(EqSatSolver *solver)
+    {
+        if (threadIdx.x != 0 || blockIdx.x != 0)
+            return;
+
+        printf("Egraph num nodes: %d\n", solver->egraph.num_nodes);
+        printf("Egraph num classes: %d\n", solver->egraph.num_classes);
+
+        for (int i = 0; i < solver->egraph.num_nodes; i++)
+        {
+            FuncNode node = solver->egraph.getNode(i);
+            int class_id = solver->egraph.getClassOfNode(i);
+            int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
+            printf("%d,%d,%d,", i, class_id, node.name);
+            unsigned char argc = getFuncArgCount(node.name);
+            for (int j = 0; j < argc; j++)
+            {
+                printf("%d,", node.args[j]);
+            }
+            printf("\n");
+        }
     }
 
     /**
@@ -114,7 +152,7 @@ namespace gpuds::eqsat
         // TODO remove after debugging
         cudaDeviceSynchronize();
         printf("Did it pass through correctly?\n");
-        printgpustate<<<1, 1>>>(d_solver);
+        printgpustate_forcomputer<<<1, 1>>>(d_solver);
         return d_solver;
     }
 
@@ -584,29 +622,6 @@ __global__ void kernel_eqsat_apply_rules(EqSatSolver *solver)
     }
 }
 
-__global__ void printgpustate_forcomputer(EqSatSolver *solver)
-{
-    if (threadIdx.x != 0 || blockIdx.x != 0)
-        return;
-
-    printf("Egraph num nodes: %d\n", solver->egraph.num_nodes);
-    printf("Egraph num classes: %d\n", solver->egraph.num_classes);
-
-    for (int i = 0; i < solver->egraph.num_nodes; i++)
-    {
-        FuncNode node = solver->egraph.getNode(i);
-        int class_id = solver->egraph.getClassOfNode(i);
-        int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
-        printf("%d,%d,%d,", i, class_id, node.name);
-        unsigned char argc = getFuncArgCount(node.name);
-        for (int j = 0; j < argc; j++)
-        {
-            printf("%d,", node.args[j]);
-        }
-        printf("\n");
-    }
-}
-
 __host__ void gpuds::eqsat::launch_eqsat_apply_rules(EqSatSolver *solver)
 {
     printgpustate<<<1, 1>>>(solver);
@@ -669,7 +684,11 @@ __global__ void perform_merges(EqSatSolver *solver)
 __device__ void dehash_parent(EqSatSolver *solver, int parent_id)
 {
     // CAS is the only thing that works on 16 bits. Can't get away with 8 bits here.
+    printf("B %d T %d: Trying to dehash parent class %d\n",
+           blockIdx.x, threadIdx.x, parent_id);
     unsigned short int ownership = atomicCAS(&solver->class_dirty_parent[parent_id], (unsigned short)0, (unsigned short)1);
+    printf("B %d T %d: Dehash ownership result for parent class %d: %d (sanity check: %d)\n",
+           blockIdx.x, threadIdx.x, parent_id, ownership, solver->class_dirty_parent[parent_id]);
     if (ownership != 0)
         return;
 
@@ -715,14 +734,16 @@ __global__ void deduplicate_and_dehash_parents(EqSatSolver *solver)
 
     for (int class_id = start_class; class_id < end_class; class_id++)
     {
+        printf("Dehash: Thread %d checking parents for class %d\n", tid, class_id);
         if (!solver->class_dirty_merged[class_id])
         {
+            printf("Dehash: Thread %d skipping class %d due to not being dirty\n", tid, class_id);
             continue;
         }
         solver->class_dirty_merged[class_id] = 0; // Mark clean.
 
-        // printf("B %d T %d: Deduplicating and dehashing parents for class %d\n",
-        //        blockIdx.x, threadIdx.x, class_id);
+        printf("B %d T %d: Deduplicating and dehashing parents for class %d\n",
+               blockIdx.x, threadIdx.x, class_id);
 
         char seen_marker = (char)(class_id - start_class + 1); // Avoid 0 marker.
 
@@ -731,12 +752,14 @@ __global__ void deduplicate_and_dehash_parents(EqSatSolver *solver)
         // Deduplicate parent list. Hopefully not too many parents.
         int parent_id;
         ListIterator<int> it(parent_list);
+        printf("Class id %d \n", class_id);
         for (; it.hasNext(); it.next(&parent_id))
         {
             it.peek(&parent_id);
             if (parent_id < 0)
                 continue; // previously marked deleted.
             parent_id = solver->egraph.resolveClass(parent_id);
+            printf("Class id %d has Parent Id %d \n", class_id, parent_id);
             if (have_seen_parent[parent_id] == seen_marker)
             {
                 // Duplicate, remove from list by marking as -1.
@@ -784,10 +807,12 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
     int start_parent = tid * classes_to_investigate_per_thread;
     int end_parent = min(solver->egraph.num_classes, start_parent + classes_to_investigate_per_thread);
 
-    for (int class_id = start_parent; class_id < end_parent; class_id++)
+    for (int class_id = start_parent + 1; class_id < end_parent + 1; class_id++)
     {
+        printf("Thread %d investigating class %d\n", tid, class_id);
         if (!solver->class_dirty_parent[class_id])
         {
+            printf("Thread %d skipping class %d due to not being dirty\n", tid, class_id);
             // Not dirty, skip.
             continue;
         }
@@ -795,8 +820,10 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
         // Not root, our work is owned by another thread.
         if (resolved_id != class_id)
         {
+            printf("Thread %d skipping class %d due to not being root\n", tid, class_id);
             continue;
         }
+        printf("Thread %d reinserting parents for class %d\n", tid, class_id);
         int next;
         for (ListIterator<int> i = ListIterator<int>(&(solver->egraph.class_to_nodes[class_id])); i.next(&next);)
         {
@@ -814,51 +841,6 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
         }
     }
 }
-
-// __global__ check_for_new_merges(EqSatSolver *solver)
-// {
-
-//     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     if tid
-//         > num_items_in_WL : BAIL !!!!!
-
-//                             eclass = WL[tid];
-//     eclass2 = WL[tid];
-
-//     for parent of eclass:
-//         for parent2 of eclass:
-//             for enode in parent:
-//                 for enode2 in parent2:
-//                     if resolvedStructuralEquality(enode, enode2)
-//         {
-//             add_to_merge_WL(parent, parent2);
-//         }
-
-//     //     for ()
-
-//     __device__ do_parents_have_a_matching_enode(EqSatSolver * solver, int parent1, int parent2, std::vector<int, int> worklist)
-//     {
-//         Egraph *thegraph = solver->egraph;
-
-//         BlockedList class_to_nodes
-//             ListIterator parent_iterator = ListIterator<int>(class_to_nodes[parent]);
-//         ListIterator parent2_iterator = ListIterator<int>(class_to_nodes[parent2]);
-
-//         int enode1, enode2;
-//         for (ListIterator li = ListIterator<int>(class_to_nodes[parent]); li.next(&enode1);)
-//         {
-//             for (ListIterator li2 = ListIterator<int>(class_to_nodes[parent2]); li2.next(&enode2);)
-//             {
-
-//                 if (enode1 == enode2)
-//                 {
-//                 }
-//             }
-//         }
-//     }
-
-// }
 
 __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
 {

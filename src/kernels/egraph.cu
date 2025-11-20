@@ -75,7 +75,7 @@ __global__ void initialize_class_to_parents_list_values(EGraph *egraph)
                 node.args[i] = child_class_id;
                 // add parent link from child class to this node's class
                 ListNode *block = egraph->list_space_cursor.allocateBlock(sizeof(int));
-                ((int *)block->data)[0] = node_id;
+                ((int *)block->data)[0] = parent_class_id;
                 addToList(&egraph->class_to_parents[child_class_id], block);
             }
         }
