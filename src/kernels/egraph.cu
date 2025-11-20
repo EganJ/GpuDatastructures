@@ -111,7 +111,6 @@ __host__ void kernel_initialize_egraph(EGraph *egraph, int n_initial_nodes)
     insert_base_graph_to_hashcons<<<512, 32>>>(egraph, n_initial_nodes);
 }
 
-
 __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &host_nodes,
                                 const std::vector<int> &roots, std::vector<int> &compressed_roots)
 {
@@ -181,13 +180,36 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     }
     out_node_id = node_id;
 
-    // TODO!!! Add to class_to_nodes list. This can be done after we know the insert succeeded, 
+    // Add to class_to_nodes list. This can be done after we know the insert succeeded,
     // means that other classes cannot access the class_to_nodes lists concurrently or they may
     // not see nodes they should.
+    ListNode *block = list_space_cursor.allocateBlock(sizeof(int));
+    ((int *)block->data)[0] = node_id;
+    addToList(&class_to_nodes[class_id], block);
+
+    // Look at how many of the new node's operands are themselves nodes (not constants or vars)
+
+    int op_count = 0;
+
+    FuncName name = node.name;
+
+    if (name != FuncName::Unset && name != FuncName::Var && name != FuncName::Const)
+    {
+        op_count = getFuncArgCount(name);
+    }
+
+    // For all of the node's node operands, add this as one of their parents
+    for (int i = 0; i < op_count; i++)
+    {
+        ListNode *ln = list_space_cursor.allocateBlock(sizeof(int));
+        *((int *)ln->data) = class_id;
+        addToList(&this->class_to_parents[getClassOfNode(node.args[i])], ln);
+    }
+
     return true;
 }
 
- __device__ void EGraph::stageMergeClasses(int class1, int class2)
+__device__ void EGraph::stageMergeClasses(int class1, int class2)
 {
     int lesser;
     int greater;
@@ -204,7 +226,7 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     }
 
     int spot = atomicAdd(&(this->classes_to_merge_count), 1);
-    ClassesToMerge* m = (ClassesToMerge*) (&this->classes_to_merge[spot]);
+    ClassesToMerge *m = (ClassesToMerge *)(&this->classes_to_merge[spot]);
     m->firstClassID = lesser;
     m->secondClassID = greater;
 }

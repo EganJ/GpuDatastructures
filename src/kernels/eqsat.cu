@@ -534,6 +534,8 @@ __device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx,
 
 __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
 {
+
+    // Copy variable bindings from the match
     VarBind var_bindings;
     var_bindings.bound = true;
     for (int i = 0; i < MAX_RULE_VARS; i++)
@@ -543,9 +545,8 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
 
     FuncNode rhs_root_node; // Root after promoting children to eclasses.
     int rhs_eclass = lookup_and_insert_children(solver, match.rhs_root, var_bindings, rhs_root_node);
-    // printf("B %d T %d: RHS root eclass after lookup %d (<--> %d)\n",
-    //        blockIdx.x, threadIdx.x, rhs_eclass, match.lhs_class_id);
-    int NOT_FOUND = -1;
+
+    const int NOT_FOUND = -1;
     if (rhs_eclass == NOT_FOUND)
     {
         // Need to insert the root node into the matched LHS class.
@@ -873,6 +874,7 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
         perform_merges<<<128, 16>>>(solver);
         cudaDeviceSynchronize();
         printgpustate<<<1, 1>>>(solver);
+        cudaDeviceSynchronize();
         printf("Kernel 2 beginning...\n");
         deduplicate_and_dehash_parents<<<512, 16>>>(solver);
         printgpustate<<<1, 1>>>(solver);
