@@ -76,7 +76,7 @@ __device__ inline HashValue atomicCAS_HV(HashValue *address, HashValue compare, 
 
 // Concurrent with lookup and insert, but NOT delete if we want unique inserts.
 // note: we will have to ensure table is aligned to 8 to be able to atomic on it.
-__device__ bool HashTable::insert(const FuncNode &key, Value val, Value &old_value)
+__device__ bool HashTable::insert(const FuncNode &key, Value val, Value &member_value)
 {
     uint32_t hash = hashNode(&key);
 
@@ -96,6 +96,7 @@ __device__ bool HashTable::insert(const FuncNode &key, Value val, Value &old_val
             if (hv2 == HV)
             {
                 // We won the race to insert
+                member_value = val;
                 return true;
             }
             // Otherwise, someone else wrote first; continuing the loop will
@@ -108,7 +109,7 @@ __device__ bool HashTable::insert(const FuncNode &key, Value val, Value &old_val
             FuncNode other_key = valToKey(HV.value);
             if (other_key == key)
             {
-                old_value = HV.value;
+                member_value = HV.value;
                 return false; // already present
             }
         }

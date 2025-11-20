@@ -1,5 +1,10 @@
 ; -*- mode: scheme -*-
 
+(FPCore (x) 
+  :name Test to induce merging on egraph
+  (sqrt (+ x (pow x 1)))
+)
+
 (FPCore (x y)
  :name "Optimisation.CirclePacking:place from circle-packing-0.1.0.4, A"
  (sqrt (+ x y)))

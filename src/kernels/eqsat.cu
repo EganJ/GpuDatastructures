@@ -49,6 +49,7 @@ namespace gpuds::eqsat
         if (threadIdx.x == 0 && blockIdx.x == 0)
         {
             solver->n_rule_matches = 0;
+            solver->egraph.hashcons.parent_egraph = &solver->egraph;
         }
     }
 
@@ -503,6 +504,8 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
     if (rhs_eclass != match.lhs_class_id)
     {
         // TO DONE merge the classes / mark them for merging later.
+        printf("B %d T %d: Merging LHS class %d with RHS class %d\n",
+               blockIdx.x, threadIdx.x, match.lhs_class_id, rhs_eclass);
         solver->egraph.stageMergeClasses(match.lhs_class_id, rhs_eclass);
     }
 }

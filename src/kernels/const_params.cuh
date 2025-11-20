@@ -6,7 +6,8 @@
 
 // TODO currently hardcoded from the rules list, find more elegant way
 // Number of rules in the rules list, exact.
-const int N_RULES = 301;
+// const int N_RULES = 301;
+const int N_RULES = 2;
 // Maximum number of terms across all rules.
 const int MAX_RULESET_TERMS = 700;
 

@@ -1,0 +1,2 @@
+[+-commutative     (+ a b)               (+ b a)]
+[pow1           a                           (pow a 1)]

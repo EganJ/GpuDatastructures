@@ -89,7 +89,7 @@ int main()
   // testUnionFindLarge();
 
   // Parse rules
-  std::ifstream rulefile("rules.txt");
+  std::ifstream rulefile("tmp_rules.txt");
 
   std::vector<FuncNode> rule_nodes{};
   std::vector<Rule> rules{};
@@ -130,7 +130,7 @@ int main()
   gpuds::eqsat::initialize_eqsat_memory();
   gpuds::eqsat::initialize_ruleset_on_device(rule_nodes, rules);
 
-  std::vector<int> root_subset = {(int)expr_roots[0], (int)expr_roots[1], (int)expr_roots[2]}; 
+  std::vector<int> root_subset = {(int)expr_roots[0]}; 
   std::cout << "Constructing E-graph for " << expr_roots.size() << " expressions:" << std::endl;
   for (int i = 0; i < root_subset.size(); ++i)
   {
@@ -141,5 +141,6 @@ int main()
   gpuds::eqsat::EqSatSolver* solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
   gpuds::eqsat::launch_eqsat_match_rules(solver);
   gpuds::eqsat::launch_eqsat_apply_rules(solver);
+  // gpuds::eqsat::launch_eqsat_merge_rules()
   return 0;
 }

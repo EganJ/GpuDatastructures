@@ -41,8 +41,7 @@ struct EGraph
     BlockedListBuffer list_space_cursor;
     char list_space[MAX_LIST_SPACE];
 
-    // TODO hashconsing structure
-    HashTable hashcons; // TODO swap out mock_hashcons with this
+    HashTable hashcons;
 
     __device__ FuncNode &getNode(int node_id)
     {

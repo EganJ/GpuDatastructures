@@ -87,6 +87,17 @@ __global__ void set_num_classes_and_nodes(EGraph *egraph, int n_initial_nodes)
     egraph->hashcons.parent_egraph = egraph;
 }
 
+__global__ void insert_base_graph_to_hashcons(EGraph *egraph, int n_initial_nodes)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    assert(n_initial_nodes <= blockDim.x * gridDim.x); // ensure enough threadss
+    if (tid >= n_initial_nodes)
+        return;
+    int added_val;
+    egraph->hashcons.insert(egraph->node_space[tid], tid, added_val);
+    assert(added_val == tid);
+}
+
 // Steps that must be performed on the device
 __host__ void kernel_initialize_egraph(EGraph *egraph, int n_initial_nodes)
 {
@@ -94,7 +105,9 @@ __host__ void kernel_initialize_egraph(EGraph *egraph, int n_initial_nodes)
     initialize_empty_lists<<<512, 32>>>(egraph);
     initialize_class_to_nodes_list_values<<<512, 32>>>(egraph);
     initialize_class_to_parents_list_values<<<512, 32>>>(egraph);
+    insert_base_graph_to_hashcons<<<512, 32>>>(egraph, n_initial_nodes);
 }
+
 
 __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &host_nodes,
                                 const std::vector<int> &roots, std::vector<int> &compressed_roots)
