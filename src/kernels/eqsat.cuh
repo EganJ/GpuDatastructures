@@ -53,6 +53,7 @@ namespace gpuds::eqsat
                                                  const std::vector<int> roots_host,
                                                  std::vector<int> &compressed_roots);
 
+    __host__ void launch_eqsat_apply_rules(EqSatSolver *solver);
 } // namespace gpuds::eqsat
 
 #endif

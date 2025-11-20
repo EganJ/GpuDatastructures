@@ -17,6 +17,6 @@ list(REMOVE_ITEM LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 add_executable(main src/main.cpp ${KERNEL_SOURCES} ${LIB_SOURCES})
 # target_link_libraries(main PRIVATE gpudslib)
 set_target_properties(main PROPERTIES
-     CUDA_ARCHITECTURES "75;80;86"
+     CUDA_ARCHITECTURES "120"
      CUDA_SEPARABLE_COMPILATION ON
 )

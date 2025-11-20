@@ -73,7 +73,6 @@ __host__ __device__ unsigned getIndex(BlockedList *bl, ListNode *ln)
 __device__ unsigned resolveListEnd(BlockedListBuffer *start, unsigned block_idx)
 {
   ListNode *node = (ListNode *)start->index(block_idx);
-  printf("resolving list end %d\n", node->next_node);
   while (node->next_node != NULL_ID)
   {
     // printf("%d: %p %d %d\n", threadIdx.x, node, (int) node - (int) (&start->buffer_data), node->next_node);

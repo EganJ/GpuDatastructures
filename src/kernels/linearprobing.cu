@@ -23,7 +23,7 @@ __device__ Hash hashNode(const FuncNode *node)
         hash ^= p[i];
         hash *= fnv_prime;
     }
-    return hash;
+    return hash % MAX_HASH_CAPACITY;
 }
 
 __device__ inline FuncNode HashTable::valToKey(int val)
@@ -57,11 +57,12 @@ __device__ Value HashTable::lookup(const FuncNode &node)
                 return HV.value;
             }
         }
-        else if (HV.hash == kSentinelDeleted)
+        else if (HV.hash == kSentinelUnused)
         {
-            return kNotFound;
+            return -1;
         }
         idx = nextIdx(idx);
+
     }
 }
 
@@ -110,6 +111,7 @@ __device__ bool HashTable::insert(const FuncNode &key, Value val, Value &old_val
             }
         }
         idx = nextIdx(idx);
+
     }
 }
 

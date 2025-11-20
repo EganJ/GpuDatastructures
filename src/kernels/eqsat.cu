@@ -367,6 +367,8 @@ lead to different
             allocation_end = min(allocation_end, N_LOCAL_MATCH_BUFF);
             for (int i = allocation_start; i < allocation_end; i++)
             {
+                // printf("Block %d Thread %d found match for rule %d on eclass %d\n",
+                //        blockIdx.x, threadIdx.x, threadIdx.x, eclass_idx);
                 local_matches[i].lhs_class_id = eclass_idx;
                 local_matches[i].rhs_root = my_rule.rhs;
                 for (int j = 0; j < MAX_RULE_VARS; j++)
@@ -461,6 +463,8 @@ __device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx,
     // At this point we have eliminated Vars and node_out should contain the right opcode and eclass-ids.
     // Try to look it up in the egraph.
     int found_node = solver->egraph.hashcons.lookup(node_out);
+    // printf("B %d T %d: lookup for rhs node %d found existing node %d\n",
+    //        blockIdx.x, threadIdx.x, rhs_node_idx, found_node);
     if (found_node == -1)
     {
         return -1;
@@ -479,14 +483,18 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
 
     FuncNode rhs_root_node; // Root after promoting children to eclasses.
     int rhs_eclass = lookup_and_insert_children(solver, match.rhs_root, var_bindings, rhs_root_node);
+    // printf("B %d T %d: RHS root eclass after lookup %d (<--> %d)\n",
+    //        blockIdx.x, threadIdx.x, rhs_eclass, match.lhs_class_id);
     int NOT_FOUND = -1;
     if (rhs_eclass == NOT_FOUND)
     {
         // Need to insert the root node into the matched LHS class.
         bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, rhs_eclass);
+        // printf("B %d T %d: Inserted RHS root node into egraph with success %d, got eclass %d\n",
+        //        blockIdx.x, threadIdx.x, inserted, rhs_eclass);
         // TODO subsequent steps?
     }
-    
+
     // If after inserting/looking up we find that our node is in a different class,
     if (rhs_eclass != match.lhs_class_id)
     {
@@ -498,14 +506,59 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
 __global__ void kernel_eqsat_apply_rules(EqSatSolver *solver)
 {
     int n_matches = solver->n_rule_matches;
-    int matches_per_thread = (n_matches + blockDim.x * gridDim.x - 1) / (blockDim.x * gridDim.x);
+    int matches_per_thread = (n_matches + (blockDim.x * gridDim.x) - 1) / (blockDim.x * gridDim.x);
 
     int start_match = (blockIdx.x * blockDim.x + threadIdx.x) * matches_per_thread;
+    start_match = min(start_match, n_matches);
     int end_match = min(n_matches, start_match + matches_per_thread);
-
     for (int match_idx = start_match; match_idx < end_match; match_idx++)
     {
         RuleMatch match = solver->rule_matches[match_idx];
         apply_match(solver, match);
+        // printf("Applied match %d: LHS class %d, RHS root %d\n", match_idx, match.lhs_class_id, match.rhs_root);
     }
 }
+
+__global__ void printgpustate(EqSatSolver *solver)
+{
+    if (threadIdx.x != 0 || blockIdx.x != 0)
+        return;
+
+    printf("Egraph num nodes: %d\n", solver->egraph.num_nodes);
+    printf("Egraph num classes: %d\n", solver->egraph.num_classes);
+
+    for (int i = 0; i < solver->egraph.num_nodes; i++)
+    {
+        FuncNode node = solver->egraph.getNode(i);
+        int class_id = solver->egraph.getClassOfNode(i);
+        int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
+        printf("Node %d: class %d (resolved %d), name %d, args:\n", i, class_id, resolved_id, node.name);
+        unsigned char argc = getFuncArgCount(node.name);
+        for (int j = 0; j < argc; j++)
+        {
+            printf("  Arg %d: %d\n", j, node.args[j]);
+        }
+    }
+}
+
+__host__ void gpuds::eqsat::launch_eqsat_apply_rules(EqSatSolver *solver)
+{
+    printgpustate<<<1, 1>>>(solver);
+    cudaDeviceSynchronize();
+    int blockSize = 16;
+    int numBlocks = 512; // TODO tune
+    kernel_eqsat_apply_rules<<<numBlocks, blockSize>>>(solver);
+    cudaDeviceSynchronize();
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess)
+    {
+        printf("There was an error \n");
+        printf("%s \n", cudaGetErrorString(error));
+        abort();
+    }
+    printf("Launched the kernel apply rules.\n");
+    printgpustate<<<1, 1>>>(solver);
+    cudaDeviceSynchronize();
+
+}
+
