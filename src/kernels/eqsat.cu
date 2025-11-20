@@ -63,6 +63,9 @@ namespace gpuds::eqsat
         cudaMemset(d_solver->rule_matches, 0, sizeof(RuleMatch) * MAX_RULE_MATCHES);
         initialize_egraph(&d_solver->egraph, node_space_host, roots_host, compressed_roots);
 
+        cudaMemset(&d_solver->class_dirty_merged, 0, (MAX_CLASSES + 1) * sizeof(bool));
+        cudaMemset(&d_solver->class_dirty_parent, 0, (MAX_CLASSES + 1) * sizeof(bool));
+
         return d_solver;
     }
 
@@ -566,19 +569,18 @@ __host__ void gpuds::eqsat::launch_eqsat_apply_rules(EqSatSolver *solver)
     printf("Launched the kernel apply rules.\n");
     printgpustate<<<1, 1>>>(solver);
     cudaDeviceSynchronize();
-
 }
 
-__global__ void calculate_egraph_nodes_and_parents(EqSatSolver* solver)
+__global__ void calculate_egraph_nodes_and_parents(EqSatSolver *solver)
 {
-    
 }
 
 /**
- * Merges the items from the worklist but does not propogate to parents. Instead, marks parents
- * to be check by a subsequent kernel.
+ * @brief Step 1 of the repair phase. This kernel concatenates lists from the work lists,
+ * and merges class IDs accordingly.
  */
-__global__ void perform_merges(EqSatSolver* solver){
+__global__ void perform_merges(EqSatSolver *solver)
+{
     int merges_per_thread = (solver->egraph.classes_to_merge_count + blockDim.x * gridDim.x - 1) / (blockDim.x * gridDim.x);
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int start_merge = tid * merges_per_thread;
@@ -587,54 +589,288 @@ __global__ void perform_merges(EqSatSolver* solver){
     for (int i = start_merge; i < end_merge; i++)
     {
         ClassesToMerge m = solver->egraph.classes_to_merge[i];
-        
-        // Perform the merge. Rely on the fact that even if the union-find is 
+
+        // Perform the merge. Rely on the fact that even if the union-find is
         // stale, the final result will be correct due to the implementation
         // of the list concatenation: it will always find the appropriate
         // list tail.
 
         int old_root = -1;
         int new_root = gpuds::unionfind::atomic_merge_and_get_old_root(solver->egraph.class_ids, m.firstClassID, m.secondClassID, old_root);
-        
-        if (new_root == -1){
+
+        if (new_root == -1)
+        {
             // They were already merged.
             continue;
         }
 
-        // Concatenate old_root into new_root. The converse can lead to branching lists, so only this 
+        // Concatenate old_root into new_root. The converse can lead to branching lists, so only this
         // direction is allowed.
         concatLists(&solver->egraph.class_to_nodes[new_root], &solver->egraph.class_to_nodes[old_root]);
         concatLists(&solver->egraph.class_to_parents[new_root], &solver->egraph.class_to_parents[old_root]);
+        solver->class_dirty_merged[new_root] = 1;
+        printf("Marked class %d as dirty merged\n", new_root);
     }
 }
 
-// __global__ check_for_new_merges(EqSatSolver* solver){
+__device__ void dehash_parent(EqSatSolver *solver, int parent_id)
+{
+    // CAS is the only thing that works on 16 bits. Can't get away with 8 bits here.
+    unsigned short int ownership = atomicCAS(&solver->class_dirty_parent[parent_id], (unsigned short)0, (unsigned short)1);
+    if (ownership != 0)
+        return;
+
+    printf("B %d T %d: Dehashing parent class %d\n",
+           blockIdx.x, threadIdx.x, parent_id);
+
+    BlockedList *member_list = &solver->egraph.class_to_nodes[parent_id];
+    ListIterator<int> it(member_list);
+    int node_id;
+    while (it.next(&node_id))
+    {
+        // Remove from hashcons
+        FuncNode node = solver->egraph.getNode(node_id);
+        solver->egraph.hashcons.remove(node);
+    }
+}
+
+/**
+ * @brief Step 2 of the repair phase. This kernel, for all merged classes:
+ * - deduplicates the parent list
+ * - while iterating over parents, removes all their members from the hash table
+ * -> we can check if we're the first thread doing this by checking if the first node has
+ *    already been removed.
+ * @param solver
+ * @return 
+ */
+__global__ void deduplicate_and_dehash_parents(EqSatSolver *solver)
+{
+    // TODO if space problems, change to shared.
+    char have_seen_parent[MAX_CLASSES + 1];
+    // Each thread grabs a class. If marked dirty, mark clean and process.
+    int tid = blockIdx.x; // Probably don't want multiple threads on this warp since divergence will essentially serialize?
+    if (threadIdx.x > 0)
+        return;
+    printf("Dedup kernel launched with on TID %d\n", tid);
+    int classes_per_thread = (solver->egraph.num_classes + gridDim.x - 1) / (gridDim.x);
+    int start_class = tid * classes_per_thread;
+    int end_class = min(solver->egraph.num_classes, start_class + classes_per_thread);
+
+    assert(classes_per_thread <= 255); // else have_seen_parent won't fit.
+    memset(have_seen_parent, 0, sizeof(char) * (solver->egraph.num_classes + 1));
+    printf("deduplicating: %d to %d\n", start_class, end_class);
+
+    for (int class_id = start_class; class_id < end_class; class_id++)
+    {
+        if (!solver->class_dirty_merged[class_id])
+        {
+            continue;
+        }
+
+        printf("B %d T %d: Deduplicating and dehashing parents for class %d\n",
+               blockIdx.x, threadIdx.x, class_id);
+
+        // TODO if this was the last time we predicate on class_dirty, we can set it to false here.
+        char seen_marker = (char)(class_id - start_class + 1); // Avoid 0 marker.
+
+        // We now have sole ownership of this class's parent list.
+        BlockedList *parent_list = &solver->egraph.class_to_parents[class_id];
+        // Deduplicate parent list. Hopefully not too many parents.
+        int parent_id;
+        ListIterator<int> it(parent_list);
+        for (; it.hasNext(); it.next(&parent_id))
+        {
+            it.peek(&parent_id);
+            if (parent_id < 0)
+                continue; // previously marked deleted.
+            if (have_seen_parent[parent_id] == seen_marker)
+            {
+                // Duplicate, remove from list by marking as -1.
+                it.write(-1); // TODO oops, this points to the next item.
+            }
+            else
+            {
+                have_seen_parent[parent_id] = seen_marker;
+                dehash_parent(solver, parent_id);
+            }
+        }
+    }
+}
+
+/**
+ * Step 3: deduplicate merged classes member nodes is uncessary!
+ * 
+ * - In order to have a duplicate, it must have arisen from having stale child eclasses:
+ *   otherwise, the hashcons would have prevented inserting the same node twice.
+ * - Stale child eclasses can only arise if the class is a merge parent itself.
+ * - However, if the class is a merge parent, its children will be re-resolved in the next step,
+ *   so duplicates will be eliminated then.
+ */
+/**
+ * @brief Step 3 of the repair phase. This kernel deduplicates node lists for all merged kernels.
+ *
+ * @param solver
+ * @return 
+ */
+// TODO this could in theory be parallelized over checking for duplicates.
+__global__ void deduplicate_member_nodes(EqSatSolver *solver)
+{
+    // For each class marked dirty_merged, deduplicate its member nodes.
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int classes_per_thread = (solver->egraph.num_classes + blockDim.x * gridDim.x - 1) / (blockDim.x * gridDim.x);
+    int start_class = tid * classes_per_thread;
+    int end_class = min(solver->egraph.num_classes, start_class + classes_per_thread);
+    for (int class_id = start_class; class_id < end_class; class_id++)
+    {
+        if (!solver->class_dirty_merged[class_id])
+        {
+            continue;
+        }
+        auto is_merge_parent = solver->class_dirty_parent[class_id];
+
+        // Last time we process this class, mark it clean.
+        solver->class_dirty_merged[class_id] = 0;
+
+        // Deduplicate member nodes.
+        FuncNode seen_nodes[MAX_NODES_PER_CLASS];
+        int n_seen = 0;
+
+        BlockedList *member_list = &solver->egraph.class_to_nodes[class_id];
+        ListIterator<int> it(member_list);
+        int node_id;
+        while (it.next(&node_id))
+        {
+            // Two cases:
+            // - is_merge_parent: there is the possiblity of child eclasses being stale.
+            //   However, they will be rebuilt and updated by the next step anyways, so can be ignored.
+            // - Not is_merge_parent: child eclasses should already be up to date. No need to re-resolve!
+            //   However, this case may be impossible! This would have required inserting the same structure
+            //   into the hash table twice, which we are supposed to guide against. Therefore, this whole 
+            //   kernel may be unnecessary.
+            FuncNode node = solver->egraph.getNode(node_id);
+
+            // TODO assertions are here to sanity check assumptions. 
+            // Remove later, alongside is_merge_parent
+            // TODO have I gotten this backwards?
+            if (!is_merge_parent){
+                FuncNode node_pre = node;
+                if (node.name != FunName::Var && node.name != FuncName::Const)
+                {
+                    int argc = getFuncArgCount(node.name);
+                    for (int i = 0; i < argc; i++)
+                    {
+                        // Promote args to eclasses.
+                        node.args[i] = solver->egraph.resolveClass(node.args[i]);
+                        assert(node.args[i] == node_pre.args[i] && "Child eclasses should have been up to date during dehashing step.");
+                    }
+                }
+            }
+
+            for (int i = 0; i < argc; i++)
+            {
+
+                if (node.name == FuncName::Unset)
+                {
+                    continue; // Already marked duplicate.
+                }
+                bool is_duplicate = false;
+                for (int i = 0; i < n_seen; i++)
+                {
+                    if (seen_nodes[i] == node)
+                    {
+                        is_duplicate = true;
+                        break;
+                    }
+                }
+                if (is_duplicate)
+                {
+                    // DONT remove from hash table, as the duplicate node needs to be in there.
+                    solver->egraph.node_space[node_id].name = FuncName::Unset;
+                }
+                else
+                {
+                    seen_nodes[n_seen] = node;
+                    n_seen++;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief Phase 4 of the repair phase. This kernel, for all merged classes:
+ * - Adds nodes back to the hash table with new hashes
+ * - Already present nodes will add new merges to the worklist
+ * 
+ * @param solver 
+ * @return  
+ */
+__global__ void reinsert_parents_of_merged(EqSatSolver *solver)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Be lazy and only do work when parent is dirty
+    if (tid >= solver->egraph.num_nodes || !solver->class_dirty_parent[tid])
+        return;
+    
+    solver->egraph
+}
+
+// __global__ check_for_new_merges(EqSatSolver *solver)
+// {
 
 //     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-//     if tid > num_items_in_WL:
-//         BAIL!!!!!
+//     if tid
+//         > num_items_in_WL : BAIL !!!!!
 
-//     eclass = WL[tid];
+//                             eclass = WL[tid];
+//     eclass2 = WL[tid];
 
 //     for parent of eclass:
 //         for parent2 of eclass:
 //             for enode in parent:
 //                 for enode2 in parent2:
-//                     if resolvedStructuralEquality(enode, enode2){
-//                         add_to_merge_WL(parent, parent2);
-//                     }
+//                     if resolvedStructuralEquality(enode, enode2)
+//         {
+//             add_to_merge_WL(parent, parent2);
+//         }
 
-//     for ()
+//     //     for ()
+
+//     __device__ do_parents_have_a_matching_enode(EqSatSolver * solver, int parent1, int parent2, std::vector<int, int> worklist)
+//     {
+//         Egraph *thegraph = solver->egraph;
+
+//         BlockedList class_to_nodes
+//             ListIterator parent_iterator = ListIterator<int>(class_to_nodes[parent]);
+//         ListIterator parent2_iterator = ListIterator<int>(class_to_nodes[parent2]);
+
+//         int enode1, enode2;
+//         for (ListIterator li = ListIterator<int>(class_to_nodes[parent]); li.next(&enode1);)
+//         {
+//             for (ListIterator li2 = ListIterator<int>(class_to_nodes[parent2]); li2.next(&enode2);)
+//             {
+
+//                 if (enode1 == enode2)
+//                 {
+//                 }
+//             }
+//         }
+//     }
 
 // }
 
+__host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
+{
 
-__host__ void gpuds::eqsat::repair_egraph(EqSatSolver* solver){
-    
     // while (num_merges_available > 0){
-        perform_merges<<<128, 16>>>(solver);
-        printgpustate<<<1,1>>>(solver);
+    perform_merges<<<128, 16>>>(solver);
+    printgpustate<<<1, 1>>>(solver);
+    deduplicate_and_dehash_parents<<<512, 16>>>(solver);
+    cudaDeviceSynchronize();
+    printf("Performed merges and dehashed parents.\n");
+    printgpustate<<<1, 1>>>(solver);
     //     check_for_new_merges(solver);
     //     // This will need to update the variable num_merges_available.
     // }

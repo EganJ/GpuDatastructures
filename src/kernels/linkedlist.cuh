@@ -105,6 +105,7 @@ struct ListIterator
 
     /**
      * @brief Gets the next element in the list, if there are any left.
+     * Subsequent calls will return the next element.
      *
      * @param result Where the next element will be stored.
      * @return true If an element was returned
@@ -126,6 +127,40 @@ struct ListIterator
                 node = getNode(list, node->next_node);
         }
 
+        return true;
+    }
+
+
+    /**
+     * @brief Gets the next element in the list, if there are any left. 
+     * Subsequent calls will return the same element.
+     *
+     * @param result Where the next element will be stored.
+     * @return true If an element was returned
+     * @return false If we're at the end of the list. In this case, "result" is unchanged.
+     */
+    __host__ __device__ bool peek(T *result)
+    {
+        if (finished)
+            return false;
+
+        *result = *((T *)&node->data[element_index]);
+        return true;
+    }
+
+    /**
+     * @brief Writes to the next element in the list, which can be accessed
+     * from a 'peek' call.
+     * 
+     * @param v Value to write
+     * @return true on success, false if at end of list
+     */
+    __host__ __device__ bool write(T v)
+    {
+        if (finished)
+            return false;
+
+        node->data[element_index] = v;
         return true;
     }
 

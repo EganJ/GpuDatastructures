@@ -33,6 +33,14 @@ namespace gpuds::eqsat
     {
     public:
         EGraph egraph; // large.
+        // TODO intitialize these to false.
+        unsigned short class_dirty_merged[MAX_CLASSES + 1];
+        unsigned short class_dirty_parent[MAX_CLASSES + 1];
+
+        // Temporary storage for rebuilding lists. Will get 
+        // copied into egraph's list space when needed.
+        BlockedListBuffer rebuild_list_space_cursor;
+        char rebuild_list_space[MAX_LIST_SPACE];
 
         // Storage for matches found during rule matching.
         int n_rule_matches = 0;
