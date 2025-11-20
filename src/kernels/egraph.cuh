@@ -34,7 +34,6 @@ struct EGraph
 
     BlockedList class_to_nodes[MAX_CLASSES + 1];
     BlockedList class_to_parents[MAX_CLASSES + 1];  
-    BlockedList staged_merges {&list_space_cursor, (unsigned) -1, (unsigned) -1};
 
     // Keep these two contiguous! list_space must immediatly
     // follow list_space_cursor in memory.
