@@ -15,12 +15,14 @@ namespace gpuds::eqsat
 {
     __constant__ Ruleset global_ruleset;
 
-    __device__ void print_worklist(EqSatSolver* solver){
+    __device__ void print_worklist(EqSatSolver *solver)
+    {
         printf("Worklist: \n");
-        for(int i=0; i<solver->egraph.classes_to_merge_count; i++){
+        for (int i = 0; i < solver->egraph.classes_to_merge_count; i++)
+        {
             ClassesToMerge m = solver->egraph.classes_to_merge[i];
-            int first_resolved = solver->egraph.resolveClassReadOnly(m.firstClassID);
-            int second_resolved = solver->egraph.resolveClassReadOnly(m.secondClassID);
+            int first_resolved = solver->egraph.resolveClassReadOnlySafe(m.firstClassID);
+            int second_resolved = solver->egraph.resolveClassReadOnlySafe(m.secondClassID);
             printf("  Merge %d: (%d->%d) <---> (%d->%d)\n", i, m.firstClassID, first_resolved, m.secondClassID, second_resolved);
         }
     }
@@ -37,8 +39,8 @@ namespace gpuds::eqsat
         for (int i = 0; i < solver->egraph.num_nodes; i++)
         {
             FuncNode node = solver->egraph.getNode(i);
-            int class_id = solver->egraph.getClassOfNode(i);
-            int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
+            int class_id = solver->egraph.node_to_class[i];
+            int resolved_id = solver->egraph.resolveClassReadOnlySafe(class_id);
             printf("%d,%d,%d,", i, class_id, node.name);
             unsigned char argc = getFuncArgCount(node.name);
             for (int j = 0; j < argc; j++)
@@ -60,8 +62,14 @@ namespace gpuds::eqsat
         for (int i = 0; i < solver->egraph.num_nodes; i++)
         {
             FuncNode node = solver->egraph.getNode(i);
-            int class_id = solver->egraph.getClassOfNode(i);
-            int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
+
+            int class_id = solver->egraph.node_to_class[i];
+            int resolved_id = -1;
+            if (node.name != FuncName::Unset)
+            {
+                assert(class_id >= 1 && "Node has invalid class ID");
+                resolved_id = solver->egraph.resolveClassReadOnly(class_id);
+            }
             printf("Node %d: class %d (resolved %d), name %d, args:\n", i, class_id, resolved_id, node.name);
             unsigned char argc = getFuncArgCount(node.name);
             for (int j = 0; j < argc; j++)
@@ -448,7 +456,8 @@ lead to different
             // TODO we can retrieve our slice of nodes into local beforehand,
             // to avoid fetching per rule.
             const FuncNode node = solver->egraph.getNode(node_idx);
-            if(node.name == FuncName::Unset){
+            if (node.name == FuncName::Unset)
+            {
                 // Unused node slot.
                 continue;
             }
@@ -514,7 +523,7 @@ lead to different
 
         size_t newSize = 8192;                           // example: 8 KB
         cudaDeviceSetLimit(cudaLimitStackSize, newSize); // TODO figure out good number, add to const_params.cuh
-       
+
         int blockSize = N_RULES;
         int numBlocks = 512; // TODO tune. Can this be num_nodes or something?
         kernel_eqsat_match_rules<<<numBlocks, blockSize>>>(solver);
@@ -840,14 +849,22 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
                 continue; // Deleted node.
             FuncNode node = solver->egraph.getNode(next);
             // Re-resolve children
-            unsigned char argc = getFuncArgCount(node.name);
-            for (int arg = 0; arg < argc; arg++)
+            if(node.name == FuncName::Unset)
             {
-                node.args[arg] = solver->egraph.resolveClass(node.args[arg]);
+                // Deleted node, skip.
+                continue;
             }
-            // Write back to node space.
-            solver->egraph.node_space[next] = node;
-            solver->egraph.node_to_class[next] = class_id;
+            if (node.name != FuncName::Const && node.name != FuncName::Var)
+            {
+                unsigned char argc = getFuncArgCount(node.name);
+                for (int arg = 0; arg < argc; arg++)
+                {
+                    node.args[arg] = solver->egraph.resolveClass(node.args[arg]);
+                }
+                // Write back to node space.
+                solver->egraph.node_space[next] = node;
+                solver->egraph.node_to_class[next] = class_id;
+            }
 
             int old_value;
             bool inserted = solver->egraph.hashcons.insert(node, next, old_value);
@@ -891,7 +908,7 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
     {
         printf("Starting repair iteration with %d merges to perform.\n", num_merges_left);
         cudaDeviceSynchronize();
-        
+
         perform_merges<<<128, 16>>>(solver);
         printf("Repair Step 1 Post: ----------------------------------------\n");
         cudaDeviceSynchronize();
@@ -899,7 +916,7 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
         cudaDeviceSynchronize();
 
         deduplicate_and_dehash_parents<<<512, 16>>>(solver);
-        
+
         cudaDeviceSynchronize();
         printf("Repair Step 2 Post: ----------------------------------------\n");
         printgpustate<<<1, 1>>>(solver);
@@ -908,7 +925,7 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
         // Step 3 as originally planned is unnecessary.
 
         reinsert_parents_of_merged<<<512, 16>>>(solver);
-        
+
         cudaDeviceSynchronize();
         printf("Repair Step 4 Post: ----------------------------------------\n");
         printgpustate<<<1, 1>>>(solver);

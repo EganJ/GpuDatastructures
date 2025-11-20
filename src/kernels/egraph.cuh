@@ -52,8 +52,19 @@ struct EGraph
         return num_nodes;
     }
 
+
     __device__ int resolveClassReadOnly(int class_id)
     {
+        return gpuds::unionfind::get_class_readonly(class_ids, class_id);
+    }
+
+    // Bound-checked version of resolveClassReadOnly
+    __device__ int resolveClassReadOnlySafe(int class_id)
+    {
+        if (class_id <= 0 || class_id > num_classes)
+        {
+            return -1; // invalid class
+        }
         return gpuds::unionfind::get_class_readonly(class_ids, class_id);
     }
 

@@ -24,6 +24,7 @@
  */
 #include <cstdio>
 #include <cuda_runtime.h>
+#include <assert.h>
 
 #include "unionfind.cuh"
 namespace impl
@@ -49,12 +50,18 @@ namespace impl
  */
 __device__ int gpuds::unionfind::get_class_readonly(const int *classes, int i)
 {
-  while (classes[i] != 0)
+  assert(i >= 1 && "Looking up class of invalid element");
+  // Promote to atomic read?
+  while (true)
   {
+    int val;
+    __nv_atomic_load(&classes[i], &val, __ATOMIC_RELAXED);
+    if (val == 0)
+      break;
     // Classes should never return to being zero! Otherwise we have a
     // data race here. In this case we may return a stale value but
     // it will be on the path to the root.
-    i = classes[i];
+    i = val;
   }
   return i;
 }
@@ -129,7 +136,7 @@ __device__ int gpuds::unionfind::atomic_merge_and_get_old_root(int *classes, int
     // dubious.
   } while (0 != atomicCAS(classes + b, 0, a));
   // After this condition: we have proved that b was a root at time of return,
-  // and now points to a (possibly stale) root. 
+  // and now points to a (possibly stale) root.
   old_root = b;
   return a;
 }

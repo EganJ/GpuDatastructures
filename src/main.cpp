@@ -136,7 +136,8 @@ int main()
   gpuds::eqsat::initialize_eqsat_memory();
   gpuds::eqsat::initialize_ruleset_on_device(rule_nodes, rules);
 
-  std::vector<int> root_subset = {(int)expr_roots[0]};
+  int n_tests = 10;
+  std::vector<int> root_subset = std::vector<int>(expr_roots.begin(), expr_roots.begin() + std::min(n_tests, (int)expr_roots.size()));
   std::cout << "Constructing E-graph for " << expr_roots.size() << " expressions:" << std::endl;
   for (int i = 0; i < root_subset.size(); ++i)
   {
