@@ -5,6 +5,7 @@
 #include "datastructures.h"
 #include "parser.h"
 #include "eqsat.h"
+#include "metrics.h"
 
 void testUnionFindSmall()
 {
@@ -83,10 +84,18 @@ void testUnionFindLarge()
   }
 }
 
-int main()
+int main(int argc, char **argv)
 {
-  // testUnionFindSmall();
-  // testUnionFindLarge();
+  int n_expressions;
+  // Read from args.
+
+  if (argc > 1) {
+      n_expressions = std::stoi(argv[1]);
+      printf("Using the first %d expressions found in the test set.\n", n_expressions);
+  } else {
+      printf("Please provide number of expressions to process as first argument.\n");
+      return 1;
+  }
 
   // Parse rules
   std::ifstream rulefile("tmp_rules.txt");
@@ -146,16 +155,53 @@ int main()
 
   std::vector<int> adjusted_indices;
   gpuds::eqsat::EqSatSolver *solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
+
+  Metric data_metrics = Metric(); 
+  data_metrics.n_rules = rules.size();
+  data_metrics.n_input_exprs = root_subset.size();
   int N_ITERS = 5;
+  cudaEvent_t match_start, match_stop, apply_stop, repair_stop;
+  cudaEventCreate(&match_start);
+  cudaEventCreate(&match_stop);
+  cudaEventCreate(&apply_stop);
+  cudaEventCreate(&repair_stop);
   for (int i = 0; i < N_ITERS; i++)
   {
+    cudaEventRecord(match_start);
     gpuds::eqsat::launch_eqsat_match_rules(solver);
+    cudaEventRecord(match_stop);
     gpuds::eqsat::launch_eqsat_apply_rules(solver);
-    gpuds::eqsat::repair_egraph(solver);
+    cudaEventRecord(apply_stop);
+    // There is an implicit cudaDeviceSynchronize() inside of repair egraph.
+    gpuds::eqsat::repair_egraph(solver, data_metrics);
+    cudaEventRecord(repair_stop);
     std::cout << "Done with iteration " << i + 1 << std::endl;
+
+    // Record times
+    cudaEventSynchronize(repair_stop);
+    float match_time;
+    cudaEventElapsedTime(&match_time, match_start, match_stop);
+    data_metrics.time_sec_match.push_back(match_time / 1000.0f);
+    cudaEventSynchronize(apply_stop);
+    float apply_time;
+    cudaEventElapsedTime(&apply_time, match_stop, apply_stop);
+    data_metrics.time_sec_apply.push_back(apply_time / 1000.0f);
+    float full_time;
+    cudaEventElapsedTime(&full_time, match_start, repair_stop);
+    data_metrics.time_sec_full_iteration.push_back(full_time / 1000.0f);
   }
-  cudaDeviceSynchronize();
   std::cout << "Final E-graph state:" << std::endl;
   gpuds::eqsat::print_eqsat_solver_state(solver);
+  std::string metric_json = printMetricJson(data_metrics);
+  std::ofstream metric_file("metrics_output.json");
+  metric_file << metric_json;
+  metric_file.close();
+  std::cout << "Metrics written to metrics_output.json" << std::endl;
+
+  cudaEventDestroy(match_start);
+  cudaEventDestroy(match_stop);
+  cudaEventDestroy(apply_stop);
+  cudaEventDestroy(repair_stop);
+
   return 0;
 }

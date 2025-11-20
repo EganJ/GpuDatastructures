@@ -7,6 +7,7 @@
 #include "const_params.cuh"
 
 #include "../rules.h"
+#include "../metrics.h"
 #include "../parser.h" // for print expression, delete as soon as possible
 
 using namespace gpuds;
@@ -861,7 +862,7 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
     }
 }
 
-__host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
+__host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver, Metric &metrics)
 {
     int num_merges_left;
     cudaMemcpy(&num_merges_left,
@@ -871,15 +872,37 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
                sizeof(int), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize(); // ensure we have the latest value
 
+
+    cudaEvent_t start_event, stop_event, start_event_dedup, stop_event_dedup, start_event_reinsert, stop_event_reinsert;
+    cudaEventCreate(&start_event);
+    cudaEventCreate(&stop_event);
+    cudaEventCreate(&stop_event_dedup);
+    cudaEventCreate(&start_event_dedup);
+    cudaEventCreate(&start_event_reinsert);
+    cudaEventCreate(&stop_event_reinsert);
+    std::vector<float> elapsed_time_in_merges;
+    std::vector<float> elapsed_time_dedup;
+    std::vector<float> elapsed_time_reinsert;
+    metrics.merges_per_repair_iteration.emplace_back();
+    
     while (num_merges_left > 0)
     {
+        metrics.merges_per_repair_iteration[metrics.merges_per_repair_iteration.size()-1].push_back(num_merges_left);
+
         printf("Starting repair iteration with %d merges to perform.\n", num_merges_left);
 
+        cudaEventRecord(start_event);
         perform_merges<<<128, 16>>>(solver);
+        cudaEventRecord(stop_event);
 
+        cudaEventRecord(start_event_dedup);
         deduplicate_and_dehash_parents<<<512, 16>>>(solver);
+        cudaEventRecord(stop_event_dedup);
 
+
+        cudaEventRecord(start_event_reinsert);
         reinsert_parents_of_merged<<<512, 16>>>(solver);
+        cudaEventRecord(stop_event_reinsert);
 
         cudaMemcpy(&num_merges_left,
                    (char *)solver +
@@ -887,5 +910,25 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
                        offsetof(EGraph, classes_to_merge_count),
                    sizeof(int), cudaMemcpyDeviceToHost);
         cudaDeviceSynchronize(); // ensure we have the latest value
+        cudaEventSynchronize(stop_event_reinsert);
+
+        float etime;
+        cudaEventElapsedTime(&etime, start_event, stop_event);
+        float etime2;
+        float etime4;
+        cudaEventElapsedTime(&etime2, start_event_dedup, stop_event_dedup);
+        cudaEventElapsedTime(&etime4, start_event_reinsert, stop_event_reinsert);
+        elapsed_time_dedup.push_back(etime2 / 1000.0f);
+        elapsed_time_in_merges.push_back(etime / 1000.0f);
+        elapsed_time_reinsert.push_back(etime4 / 1000.0f);
     }
+    metrics.time_sec_repair_step1.emplace_back(elapsed_time_in_merges);
+    metrics.time_sec_repair_step2.emplace_back(elapsed_time_dedup);
+    metrics.time_sec_repair_step4.emplace_back(elapsed_time_reinsert);
+    cudaEventDestroy(start_event);
+    cudaEventDestroy(stop_event);
+    cudaEventDestroy(start_event_dedup);
+    cudaEventDestroy(start_event_reinsert);
+    cudaEventDestroy(stop_event_reinsert);
+    cudaEventDestroy(stop_event_dedup);
 }

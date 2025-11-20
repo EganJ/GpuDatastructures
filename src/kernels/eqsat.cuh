@@ -7,6 +7,7 @@
 
 #include "egraph.cuh"
 #include "const_params.cuh"
+#include "../metrics.h"
 
 namespace gpuds::eqsat
 {
@@ -62,7 +63,7 @@ namespace gpuds::eqsat
                                                  std::vector<int> &compressed_roots);
 
     __host__ void launch_eqsat_apply_rules(EqSatSolver *solver);
-    __host__ void repair_egraph(EqSatSolver *solver);
+    __host__ void repair_egraph(EqSatSolver *solver, Metric &metrics);
     __host__ void print_eqsat_solver_state(EqSatSolver *solver);
 } // namespace gpuds::eqsat
 
