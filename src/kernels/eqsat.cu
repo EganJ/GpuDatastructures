@@ -449,7 +449,9 @@ __device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx,
             {
                 all_children_found = false;
                 // Insert child
-                bool inserted = solver->egraph.insertNode(child_node, -1, child_eclass);
+                int found_node = -1;
+                bool inserted = solver->egraph.insertNode(child_node, -1, found_node);
+                child_eclass = solver->egraph.resolveClassReadOnly(solver->egraph.node_to_class[found_node]);
             }
             node_out.args[i] = child_eclass;
         }
@@ -489,7 +491,9 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
     if (rhs_eclass == NOT_FOUND)
     {
         // Need to insert the root node into the matched LHS class.
-        bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, rhs_eclass);
+        int found_node = -1;
+        bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, found_node);
+        rhs_eclass = solver->egraph.resolveClassReadOnly(solver->egraph.node_to_class[found_node]);
         // printf("B %d T %d: Inserted RHS root node into egraph with success %d, got eclass %d\n",
         //        blockIdx.x, threadIdx.x, inserted, rhs_eclass);
         // TODO subsequent steps?

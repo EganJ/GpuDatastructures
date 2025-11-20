@@ -5,6 +5,8 @@
 #include "../rules.h"
 #include <cuda_runtime.h>
 
+// Inspired by https://github.com/nosferalatu/SimpleGPUHashTable/blob/master/src/main.cpp.
+
 typedef int Value;
 typedef unsigned Hash;
 struct HashValue

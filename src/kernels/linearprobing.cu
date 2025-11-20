@@ -8,6 +8,8 @@
 
 typedef unsigned long long llu;
 
+// Inspired by https://github.com/nosferalatu/SimpleGPUHashTable/blob/master/src/main.cpp.
+
 // Hash a FuncNode to produce a hash value. Need to use a hash that accepts
 // a sequence of ints. Go with the FNV hash.
 const unsigned fnv_prime = 16777619;
