@@ -130,17 +130,20 @@ int main()
   gpuds::eqsat::initialize_eqsat_memory();
   gpuds::eqsat::initialize_ruleset_on_device(rule_nodes, rules);
 
-  std::vector<int> root_subset = {(int)expr_roots[0]}; 
+  std::vector<int> root_subset = {(int)expr_roots[0]};
   std::cout << "Constructing E-graph for " << expr_roots.size() << " expressions:" << std::endl;
   for (int i = 0; i < root_subset.size(); ++i)
   {
-    std::cout << " Expression " << i << " root node ID: " << root_subset[i] << " " <<  printExpression(nodes, root_subset[i]) << std::endl;
+    std::cout << " Expression " << i << " root node ID: " << root_subset[i] << " " << printExpression(nodes, root_subset[i]) << std::endl;
   }
 
   std::vector<int> adjusted_indices;
-  gpuds::eqsat::EqSatSolver* solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
-  gpuds::eqsat::launch_eqsat_match_rules(solver);
-  gpuds::eqsat::launch_eqsat_apply_rules(solver);
-  gpuds::eqsat::repair_egraph(solver);
+  gpuds::eqsat::EqSatSolver *solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
+  for (int i = 0; i < 2; i++)
+  {
+    gpuds::eqsat::launch_eqsat_match_rules(solver);
+    gpuds::eqsat::launch_eqsat_apply_rules(solver);
+    gpuds::eqsat::repair_egraph(solver);
+  }
   return 0;
 }

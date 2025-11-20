@@ -501,16 +501,15 @@ lead to different
 
         size_t newSize = 8192;                           // example: 8 KB
         cudaDeviceSetLimit(cudaLimitStackSize, newSize); // TODO figure out good number, add to const_params.cuh
-        printf("Before launching match of the rules.\n");
-        printgpustate<<<1, 1>>>(solver);
-        cudaDeviceSynchronize();
+       
         int blockSize = N_RULES;
         int numBlocks = 512; // TODO tune. Can this be num_nodes or something?
         kernel_eqsat_match_rules<<<numBlocks, blockSize>>>(solver);
 
+        printf("Kernel Apply Rules Post: ----------------------------------------\n");
         cudaDeviceSynchronize();
-        printf("Rule Match has occurred!\n");
         printgpustate<<<1, 1>>>(solver);
+        cudaDeviceSynchronize();
     }
 }
 
@@ -627,21 +626,12 @@ __global__ void kernel_eqsat_apply_rules(EqSatSolver *solver)
 
 __host__ void gpuds::eqsat::launch_eqsat_apply_rules(EqSatSolver *solver)
 {
-    printgpustate<<<1, 1>>>(solver);
-    cudaDeviceSynchronize();
     int blockSize = 16;
     int numBlocks = 512; // TODO tune
     kernel_eqsat_apply_rules<<<numBlocks, blockSize>>>(solver);
+
+    printf("Kernel Apply Rules Post: ----------------------------------------\n");
     cudaDeviceSynchronize();
-    cudaError_t error = cudaGetLastError();
-    if (error != cudaSuccess)
-    {
-        printf("There was an error \n");
-        printf("%s \n", cudaGetErrorString(error));
-        abort();
-    }
-    cudaDeviceSynchronize();
-    printf("Launched the kernel apply rules.\n");
     printgpustate<<<1, 1>>>(solver);
     cudaDeviceSynchronize();
 }
@@ -844,8 +834,8 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
             }
             // Write back to node space.
             solver->egraph.node_space[next] = node;
-            solver->egraph.node_to_class[next] = class_id;            
-            
+            solver->egraph.node_to_class[next] = class_id;
+
             int old_value;
             bool inserted = solver->egraph.hashcons.insert(node, next, old_value);
             if (!inserted)
@@ -855,11 +845,14 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
 
                 unsigned resolved_old_class_id = solver->egraph.getClassOfNode(old_value);
 
-                if (resolved_old_class_id == class_id) {
+                if (resolved_old_class_id == class_id)
+                {
                     // Already have a duplicate in this node. Delete this one.
                     printf("Thread %d found duplicate node %d <--> %d in class %d, removing %d\n", tid, next, old_value, class_id, next);
                     solver->egraph.node_space[next].name = FuncName::Unset;
-                } else  {
+                }
+                else
+                {
                     // Need to trigger an upwards merge
                     printf("Thread %d found duplicate node %d <--> %d in classes %d and %d, scheduling merge\n", tid, next, old_value, class_id, resolved_old_class_id);
                     solver->egraph.stageMergeClasses(resolved_old_class_id, class_id);
@@ -880,26 +873,28 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
 
     while (num_merges_left > 0)
     {
-        printf("Kernel 1 beginning...\n");
+        
         perform_merges<<<128, 16>>>(solver);
+        printf("Repair Step 1 Post: ----------------------------------------\n");
         cudaDeviceSynchronize();
         printgpustate<<<1, 1>>>(solver);
         cudaDeviceSynchronize();
-        printf("Kernel 2 beginning...\n");
-        deduplicate_and_dehash_parents<<<512, 16>>>(solver);
-        printgpustate<<<1, 1>>>(solver);
-        // printgpustate<<<1, 1>>>(solver)
-        cudaDeviceSynchronize();
-        printf("Kernel 4 beginning...\n");
 
+        deduplicate_and_dehash_parents<<<512, 16>>>(solver);
+        
         cudaDeviceSynchronize();
+        printf("Repair Step 2 Post: ----------------------------------------\n");
+        printgpustate<<<1, 1>>>(solver);
+        cudaDeviceSynchronize();
+
+        // Step 3 as originally planned is unnecessary.
 
         reinsert_parents_of_merged<<<512, 16>>>(solver);
-        printf("After reinsertion\n");
+        
         cudaDeviceSynchronize();
-        cudaDeviceSynchronize();
+        printf("Repair Step 4 Post: ----------------------------------------\n");
         printgpustate<<<1, 1>>>(solver);
-        // printgpustate_forcomputer<<<1, 1>>>(solver);
+        cudaDeviceSynchronize();
 
         cudaMemcpy(&num_merges_left,
                    (char *)solver +

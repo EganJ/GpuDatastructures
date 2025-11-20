@@ -1,5 +1,9 @@
 ; -*- mode: scheme -*-
 
+(FPCore (x y)
+ :name "Optimisation.CirclePacking:place from circle-packing-0.1.0.4, A"
+ (sqrt (+ x y)))
+
 (FPCore (x)
   : Name test to induce upwards merging on graph
   (let* 
@@ -17,10 +21,6 @@
   :name Test to induce merging on egraph
   (sqrt (+ x (pow x 1)))
 )
-
-(FPCore (x y)
- :name "Optimisation.CirclePacking:place from circle-packing-0.1.0.4, A"
- (sqrt (+ x y)))
 
 (FPCore (x y z t)
  :name "Optimisation.CirclePacking:place from circle-packing-0.1.0.4, B"
