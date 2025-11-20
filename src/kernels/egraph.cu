@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <iostream>
 
+#include "../parser.h" // for print expression, delete as soon as possible
+
 __global__ void initialize_empty_lists(EGraph *egraph)
 {
     int n_threads = blockDim.x * gridDim.x;
@@ -28,11 +30,12 @@ __global__ void initialize_class_to_nodes_list_values(EGraph *egraph)
 {
     const auto single_int_block = sizeof(int) + sizeof(ListNode);
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
     if (tid == 0)
     {
         // Reserve space for all nodes for class_to_nodes
         assert(egraph->list_space_cursor.buffer_allocated == 0);
-        egraph->list_space_cursor.buffer_allocated += single_int_block * egraph->num_nodes;
+        egraph->list_space_cursor.buffer_allocated += single_int_block * (egraph->num_nodes + 1);
     }
 
     // Handle class to nodes mapping
@@ -114,6 +117,12 @@ __host__ void initialize_egraph(EGraph *egraph, const std::vector<FuncNode> &hos
 {
     std::vector<FuncNode> compressed_nodes;
     compress_nodespace(host_nodes, roots, compressed_nodes, compressed_roots);
+
+    printf("Expressions, compressed:\n");
+    for (int r : compressed_roots)
+    {
+        printf("%s\n", printExpression(compressed_nodes, r).c_str());
+    }
 
     std::vector<int> class_ids(compressed_nodes.size());
     for (int i = 0; i < class_ids.size(); i++)

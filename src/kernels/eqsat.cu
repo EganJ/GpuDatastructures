@@ -7,6 +7,7 @@
 #include "const_params.cuh"
 
 #include "../rules.h"
+#include "../parser.h" // for print expression, delete as soon as possible
 
 using namespace gpuds;
 using namespace gpuds::eqsat;
@@ -95,6 +96,12 @@ namespace gpuds::eqsat
                                                  const std::vector<int> roots_host,
                                                  std::vector<int> &compressed_roots)
     {
+        printf("Expressions, uncompressed:\n");
+        for (int r : roots_host)
+        {
+            printf("%s\n", printExpression(node_space_host, r).c_str());
+        }
+
         EqSatSolver *d_solver;
         cudaMalloc(&d_solver, sizeof(EqSatSolver));
         initialize_eqsat_solver<<<1, 1>>>(d_solver);
@@ -104,6 +111,10 @@ namespace gpuds::eqsat
         cudaMemset(&d_solver->class_dirty_merged, 0, (MAX_CLASSES + 1) * sizeof(bool));
         cudaMemset(&d_solver->class_dirty_parent, 0, (MAX_CLASSES + 1) * sizeof(bool));
 
+        // TODO remove after debugging
+        cudaDeviceSynchronize();
+        printf("Did it pass through correctly?\n");
+        printgpustate<<<1, 1>>>(d_solver);
         return d_solver;
     }
 
