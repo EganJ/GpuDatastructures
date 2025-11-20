@@ -177,6 +177,8 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
         node_space[node_id].name = FuncName::Unset;
         out_node_id = existing_node_id;
         return false;
+    } else {
+        printf("Inserted new node %d into class %d\n", node_id, class_id);
     }
     out_node_id = node_id;
 

@@ -552,7 +552,7 @@ __device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx,
     node_out = global_ruleset.rule_nodes[rhs_node_idx];
     if (node_out.name == FuncName::Var)
     {
-        return var_bindings.bindings[node_out.args[0]]; // Already bound by match.
+        return solver->egraph.resolveClass(var_bindings.bindings[node_out.args[0]]); // Already bound by match.
     }
     if (node_out.name != FuncName::Const)
     {
@@ -842,50 +842,60 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
             continue;
         }
         printf("Thread %d reinserting parents for class %d\n", tid, class_id);
-        int next;
-        for (ListIterator<int> i = ListIterator<int>(&(solver->egraph.class_to_nodes[class_id])); i.next(&next);)
+
+        // Want to be able to write back to the list, need to do different pattern
+        ListIterator<int> it(&(solver->egraph.class_to_nodes[class_id]));
+        for (int next; it.peek(&next); it.next(&next))
         {
-            if (next < 0)
-                continue; // Deleted node.
-            FuncNode node = solver->egraph.getNode(next);
-            // Re-resolve children
-            if(node.name == FuncName::Unset)
+            if (next >= 0)
             {
-                // Deleted node, skip.
-                continue;
-            }
-            if (node.name != FuncName::Const && node.name != FuncName::Var)
-            {
-                unsigned char argc = getFuncArgCount(node.name);
-                for (int arg = 0; arg < argc; arg++)
+                FuncNode node = solver->egraph.getNode(next);
+                // Re-resolve children
+                if (node.name == FuncName::Unset)
                 {
-                    node.args[arg] = solver->egraph.resolveClass(node.args[arg]);
-                }
-                // Write back to node space.
-                solver->egraph.node_space[next] = node;
-                solver->egraph.node_to_class[next] = class_id;
-            }
-
-            int old_value;
-            bool inserted = solver->egraph.hashcons.insert(node, next, old_value);
-            if (!inserted)
-            {
-                // Look at old_value's class. Add both that and this parent to a work list.
-                // Then, mark this node as deleted (the other one remains).
-
-                unsigned resolved_old_class_id = solver->egraph.getClassOfNode(old_value);
-
-                if (resolved_old_class_id == class_id)
-                {
-                    // Already have a duplicate in this node. Delete this one.
-                    printf("Thread %d found duplicate node %d <--> %d in class %d, removing %d\n", tid, next, old_value, class_id, next);
-                    solver->egraph.node_space[next].name = FuncName::Unset;
+                    // Deleted node, skip.
+                    it.write(-1);
                 }
                 else
                 {
-                    // Need to trigger an upwards merge
-                    printf("Thread %d found duplicate node %d <--> %d in classes %d and %d, scheduling merge\n", tid, next, old_value, class_id, resolved_old_class_id);
-                    solver->egraph.stageMergeClasses(resolved_old_class_id, class_id);
+                    if (node.name != FuncName::Const && node.name != FuncName::Var)
+                    {
+                        printf("Reinserting op node %d of class %d\n", next, class_id);
+                        unsigned char argc = getFuncArgCount(node.name);
+                        for (int arg = 0; arg < argc; arg++)
+                        {
+                            int old_arg = node.args[arg]; // TODO remove after debugging
+                            node.args[arg] = solver->egraph.resolveClass(node.args[arg]);
+                            printf("Resolved arg %d of node %d from %d to %d\n", arg, next, old_arg, node.args[arg]);
+                        }
+                        // Write back to node space.
+                        solver->egraph.node_space[next] = node;
+                        solver->egraph.node_to_class[next] = class_id;
+                    }
+
+                    int old_value;
+                    bool inserted = solver->egraph.hashcons.insert(node, next, old_value);
+                    if (!inserted)
+                    {
+                        // Look at old_value's class. Add both that and this parent to a work list.
+                        // Then, mark this node as deleted (the other one remains).
+
+                        unsigned resolved_old_class_id = solver->egraph.getClassOfNode(old_value);
+
+                        if (resolved_old_class_id == class_id)
+                        {
+                            // Already have a duplicate in this node. Delete this one.
+                            printf("Thread %d found duplicate node %d <--> %d in class %d, removing %d\n", tid, next, old_value, class_id, next);
+                            solver->egraph.node_space[next].name = FuncName::Unset;
+                            it.write(-1);
+                        }
+                        else
+                        {
+                            // Need to trigger an upwards merge
+                            printf("Thread %d found duplicate node %d <--> %d in classes %d and %d, scheduling merge\n", tid, next, old_value, class_id, resolved_old_class_id);
+                            solver->egraph.stageMergeClasses(resolved_old_class_id, class_id);
+                        }
+                    }
                 }
             }
         }

@@ -146,7 +146,7 @@ int main()
 
   std::vector<int> adjusted_indices;
   gpuds::eqsat::EqSatSolver *solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
-  for (int i = 0; i < 2; i++)
+  for (int i = 0; i < 3; i++)
   {
     gpuds::eqsat::launch_eqsat_match_rules(solver);
     gpuds::eqsat::launch_eqsat_apply_rules(solver);
