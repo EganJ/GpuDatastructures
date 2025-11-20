@@ -16,6 +16,29 @@ namespace gpuds::eqsat
     __constant__ Ruleset global_ruleset;
 
     // Debugging
+    __device__ void printgpustate_forcomputer(EqSatSolver *solver)
+    {
+        if (threadIdx.x != 0 || blockIdx.x != 0)
+            return;
+
+        printf("Egraph num nodes: %d\n", solver->egraph.num_nodes);
+        printf("Egraph num classes: %d\n", solver->egraph.num_classes);
+
+        for (int i = 0; i < solver->egraph.num_nodes; i++)
+        {
+            FuncNode node = solver->egraph.getNode(i);
+            int class_id = solver->egraph.getClassOfNode(i);
+            int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
+            printf("%d,%d,%d,", i, class_id, node.name);
+            unsigned char argc = getFuncArgCount(node.name);
+            for (int j = 0; j < argc; j++)
+            {
+                printf("%d,", node.args[j]);
+            }
+            printf("\n");
+        }
+    }
+
     __global__ void printgpustate(EqSatSolver *solver)
     {
         if (threadIdx.x != 0 || blockIdx.x != 0)
@@ -66,29 +89,8 @@ namespace gpuds::eqsat
             }
             printf("\n");
         }
-    }
 
-    __global__ void printgpustate_forcomputer(EqSatSolver *solver)
-    {
-        if (threadIdx.x != 0 || blockIdx.x != 0)
-            return;
-
-        printf("Egraph num nodes: %d\n", solver->egraph.num_nodes);
-        printf("Egraph num classes: %d\n", solver->egraph.num_classes);
-
-        for (int i = 0; i < solver->egraph.num_nodes; i++)
-        {
-            FuncNode node = solver->egraph.getNode(i);
-            int class_id = solver->egraph.getClassOfNode(i);
-            int resolved_id = solver->egraph.resolveClassReadOnly(class_id);
-            printf("%d,%d,%d,", i, class_id, node.name);
-            unsigned char argc = getFuncArgCount(node.name);
-            for (int j = 0; j < argc; j++)
-            {
-                printf("%d,", node.args[j]);
-            }
-            printf("\n");
-        }
+        printgpustate_forcomputer(solver);
     }
 
     /**
@@ -152,7 +154,7 @@ namespace gpuds::eqsat
         // TODO remove after debugging
         cudaDeviceSynchronize();
         printf("Did it pass through correctly?\n");
-        printgpustate_forcomputer<<<1, 1>>>(d_solver);
+        // printgpustate_forcomputer<<<1, 1>>>(d_solver);
         return d_solver;
     }
 
@@ -871,7 +873,7 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
         cudaDeviceSynchronize();
         cudaDeviceSynchronize();
         printgpustate<<<1, 1>>>(solver);
-        printgpustate_forcomputer<<<1, 1>>>(solver);
+        // printgpustate_forcomputer<<<1, 1>>>(solver);
 
         cudaMemcpy(&num_merges_left,
                    (char *)solver +

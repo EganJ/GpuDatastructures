@@ -188,22 +188,21 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     addToList(&class_to_nodes[class_id], block);
 
     // Look at how many of the new node's operands are themselves nodes (not constants or vars)
-
     int op_count = 0;
-
     FuncName name = node.name;
 
     if (name != FuncName::Unset && name != FuncName::Var && name != FuncName::Const)
     {
         op_count = getFuncArgCount(name);
     }
-
     // For all of the node's node operands, add this as one of their parents
     for (int i = 0; i < op_count; i++)
     {
+        int resolved_class = resolveClass(node.args[i]);
+        printf("Adding node %d (class %d) as parent to class %d\n", node_id, class_id, resolved_class);
         ListNode *ln = list_space_cursor.allocateBlock(sizeof(int));
         *((int *)ln->data) = class_id;
-        addToList(&this->class_to_parents[getClassOfNode(node.args[i])], ln);
+        addToList(&this->class_to_parents[resolved_class], ln);
     }
 
     return true;
