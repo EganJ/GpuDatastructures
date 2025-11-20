@@ -146,11 +146,16 @@ int main()
 
   std::vector<int> adjusted_indices;
   gpuds::eqsat::EqSatSolver *solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
-  for (int i = 0; i < 3; i++)
+  int N_ITERS = 5;
+  for (int i = 0; i < N_ITERS; i++)
   {
     gpuds::eqsat::launch_eqsat_match_rules(solver);
     gpuds::eqsat::launch_eqsat_apply_rules(solver);
     gpuds::eqsat::repair_egraph(solver);
+    std::cout << "Done with iteration " << i + 1 << std::endl;
   }
+  cudaDeviceSynchronize();
+  std::cout << "Final E-graph state:" << std::endl;
+  gpuds::eqsat::print_eqsat_solver_state(solver);
   return 0;
 }

@@ -177,9 +177,7 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
         node_space[node_id].name = FuncName::Unset;
         out_node_id = existing_node_id;
         return false;
-    } else {
-        printf("Inserted new node %d into class %d\n", node_id, class_id);
-    }
+    } 
     out_node_id = node_id;
 
     // Add to class_to_nodes list. This can be done after we know the insert succeeded,
@@ -201,7 +199,6 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     for (int i = 0; i < op_count; i++)
     {
         int resolved_class = resolveClass(node.args[i]);
-        printf("Adding node %d (class %d) as parent to class %d\n", node_id, class_id, resolved_class);
         ListNode *ln = list_space_cursor.allocateBlock(sizeof(int));
         *((int *)ln->data) = class_id;
         addToList(&this->class_to_parents[resolved_class], ln);

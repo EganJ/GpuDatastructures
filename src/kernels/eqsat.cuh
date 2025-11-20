@@ -63,6 +63,7 @@ namespace gpuds::eqsat
 
     __host__ void launch_eqsat_apply_rules(EqSatSolver *solver);
     __host__ void repair_egraph(EqSatSolver *solver);
+    __host__ void print_eqsat_solver_state(EqSatSolver *solver);
 } // namespace gpuds::eqsat
 
 #endif
