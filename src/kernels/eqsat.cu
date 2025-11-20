@@ -154,7 +154,8 @@ namespace gpuds::eqsat
         // TODO remove after debugging
         cudaDeviceSynchronize();
         printf("Did it pass through correctly?\n");
-        // printgpustate_forcomputer<<<1, 1>>>(d_solver);
+        printgpustate<<<1, 1>>>(d_solver);
+        cudaDeviceSynchronize();
         return d_solver;
     }
 
@@ -820,6 +821,7 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
             // Not dirty, skip.
             continue;
         }
+        solver->class_dirty_parent[class_id] = 0; // Mark clean.
         unsigned resolved_id = solver->egraph.resolveClass(class_id);
         // Not root, our work is owned by another thread.
         if (resolved_id != class_id)
@@ -876,8 +878,7 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
                    offsetof(EGraph, classes_to_merge_count),
                sizeof(int), cudaMemcpyDeviceToHost);
 
-    int tries = 1;
-    while (num_merges_left > 0 && tries > 0)
+    while (num_merges_left > 0)
     {
         printf("Kernel 1 beginning...\n");
         perform_merges<<<128, 16>>>(solver);
@@ -907,6 +908,5 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
                    sizeof(int), cudaMemcpyDeviceToHost);
 
         printf("Kernels complete, and %d merges remain!\n", num_merges_left);
-        tries--;
     }
 }

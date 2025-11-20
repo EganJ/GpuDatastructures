@@ -10,7 +10,7 @@
      [pow1onepx (pow onepx 1)]
      [pow1x1p1 (pow x1p1 1)]
     )
-    (* pow1onepx pow1x1p1)
+    (* pow1onepx (* pow1x1p1 xp1))
   ))
 
 (FPCore (x) 
