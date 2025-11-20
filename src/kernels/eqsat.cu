@@ -5,6 +5,7 @@
 
 #include "eqsat.cuh"
 #include "const_params.cuh"
+#include "linkedlist.cuh"
 
 #include "../rules.h"
 
@@ -569,3 +570,28 @@ __host__ void gpuds::eqsat::launch_eqsat_apply_rules(EqSatSolver *solver)
 
 }
 
+__global__ void calculate_egraph_nodes_and_parents(EGraph* eg)
+{
+    int nodeIdx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (nodeIdx > eg->num_nodes)
+        return;
+
+    int cls = eg->node_to_class[nodeIdx];
+    FuncNode *n = &(eg->node_space[nodeIdx]);
+
+    // ListNode *ln = newNode(&(eg->list_space_cursor), sizeof(int));
+    // *((int*) ln->data) = nodeIdx;
+    // addToList(&eg->class_to_nodes[cls], ln);
+
+    int op_count = 0;
+    if (n->name != FuncName::Unset && n->name != FuncName::Var && n->name != FuncName::Const) {
+        op_count = getFuncArgCount(n->name);
+    }
+
+    for (int i = 0; i < op_count; i++) {
+        ListNode *ln1 = newNode(&(eg->list_space_cursor), (unsigned) sizeof(int));
+        *((int*) ln1->data) = cls;
+        addToList(&eg->class_to_parents[eg->getClassOfNode(n->args[i])], ln1);
+    }
+}

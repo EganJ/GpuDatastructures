@@ -153,7 +153,7 @@ __device__ BlockedList *concatLists(BlockedList *bl1, BlockedList *bl2)
  * @param size How many elements which can be put in the node
  * @return ListNode* The new list node
  */
-__device__ ListNode *newNode(BlockedListBuffer *blb, int size)
+__device__ ListNode *newNode(BlockedListBuffer *blb, unsigned size)
 {
   int index = atomicAdd(&(blb->buffer_size), sizeof(ListNode) + size * sizeof(char));
   ListNode *ln = (ListNode *)&(blb->buffer_data[index]);

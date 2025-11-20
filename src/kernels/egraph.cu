@@ -1,7 +1,10 @@
 #include "egraph.cuh"
 #include "const_params.cuh"
+#include "linkedlist.cuh"
+
 #include <stdio.h>
 #include <iostream>
+
 
 __global__ void initialize_empty_lists(EGraph *egraph)
 {
@@ -175,6 +178,26 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     // TODO!!! Add to class_to_nodes list. This can be done after we know the insert succeeded, 
     // means that other classes cannot access the class_to_nodes lists concurrently or they may
     // not see nodes they should.
+
+    // Add the new node to the class-to-nodes list for the class
+    ListNode *ln = newNode(&(this->list_space_cursor), sizeof(int));
+    *((int*) ln->data) = node_id;
+    addToList(&this->class_to_nodes[class_id], ln);
+
+    // Look at how many of the new node's operands are themselves nodes (not constants or vars)
+    int op_count = 0;
+    FuncName name = node.name;
+    if (name != FuncName::Unset && name != FuncName::Var && name != FuncName::Const) {
+        op_count = getFuncArgCount(name);
+    }
+
+    // For all of the node's node operands, add this as one of their parents
+    for (int i = 0; i < op_count; i++) {
+        ListNode *ln1 = newNode(&(this->list_space_cursor), sizeof(int));
+        *((int*) ln->data) = class_id;
+        addToList(&this->class_to_parents[getClassOfNode(node.args[i])], ln1);
+    }
+  
     return true;
 }
 
