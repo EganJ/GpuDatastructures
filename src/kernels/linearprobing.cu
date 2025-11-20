@@ -107,7 +107,20 @@ __device__ bool HashTable::insert(const FuncNode &key, Value val, Value &member_
             // Check if keys match.
             FuncNode other_key = valToKey(HV.value);
             if (other_key == key)
-            {
+            {   
+                printf("Structural equaltity found between nodes:\n");
+                printf(" (1) name: %d args: ", key.name);
+                int argc = getFuncArgCount(key.name);
+                for (int i = 0; i < argc; i++) {
+                    printf("%d ", key.args[i]);
+                }
+                printf("\n");
+                printf(" (2) name: %d args: ", other_key.name);
+                argc = getFuncArgCount(other_key.name);
+                for (int i = 0; i < argc; i++) {
+                    printf("%d ", other_key.args[i]);
+                }
+                printf("\n");
                 member_value = HV.value;
                 return false; // already present
             }

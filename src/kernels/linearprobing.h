@@ -9,7 +9,8 @@
 
 typedef int Value;
 typedef unsigned Hash;
-struct HashValue
+
+struct __align__(8) HashValue
 {
     Hash hash;
     Value value;

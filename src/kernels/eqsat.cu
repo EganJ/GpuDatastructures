@@ -704,6 +704,7 @@ __device__ void dehash_parent(EqSatSolver *solver, int parent_id)
     {
         // Remove from hashcons
         FuncNode node = solver->egraph.getNode(node_id);
+        printf("removing node %d\n", node_id);
         solver->egraph.hashcons.remove(node);
     }
 }
@@ -770,6 +771,7 @@ __global__ void deduplicate_and_dehash_parents(EqSatSolver *solver)
             else
             {
                 have_seen_parent[parent_id] = seen_marker;
+                printf("removing parents of %d\n", parent_id);
                 dehash_parent(solver, parent_id);
             }
         }
@@ -829,16 +831,37 @@ __global__ void reinsert_parents_of_merged(EqSatSolver *solver)
         int next;
         for (ListIterator<int> i = ListIterator<int>(&(solver->egraph.class_to_nodes[class_id])); i.next(&next);)
         {
+            if (next < 0)
+                continue; // Deleted node.
+            FuncNode node = solver->egraph.getNode(next);
+            // Re-resolve children
+            unsigned char argc = getFuncArgCount(node.name);
+            for (int arg = 0; arg < argc; arg++)
+            {
+                node.args[arg] = solver->egraph.resolveClass(node.args[arg]);
+            }
+            // Write back to node space.
+            solver->egraph.node_space[next] = node;
+            solver->egraph.node_to_class[next] = class_id;            
+            
             int old_value;
-            bool inserted = solver->egraph.hashcons.insert(solver->egraph.node_space[next], next, old_value);
+            bool inserted = solver->egraph.hashcons.insert(node, next, old_value);
             if (!inserted)
             {
                 // Look at old_value's class. Add both that and this parent to a work list.
                 // Then, mark this node as deleted (the other one remains).
-                unsigned resolved_old_class_id = solver->egraph.resolveClass(old_value);
 
-                solver->egraph.stageMergeClasses(resolved_old_class_id, class_id);
-                // they are staged for the next round.
+                unsigned resolved_old_class_id = solver->egraph.getClassOfNode(old_value);
+
+                if (resolved_old_class_id == class_id) {
+                    // Already have a duplicate in this node. Delete this one.
+                    printf("Thread %d found duplicate node %d <--> %d in class %d, removing %d\n", tid, next, old_value, class_id, next);
+                    solver->egraph.node_space[next].name = FuncName::Unset;
+                } else  {
+                    // Need to trigger an upwards merge
+                    printf("Thread %d found duplicate node %d <--> %d in classes %d and %d, scheduling merge\n", tid, next, old_value, class_id, resolved_old_class_id);
+                    solver->egraph.stageMergeClasses(resolved_old_class_id, class_id);
+                }
             }
         }
     }
@@ -852,7 +875,9 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
                    offsetof(EqSatSolver, egraph) +
                    offsetof(EGraph, classes_to_merge_count),
                sizeof(int), cudaMemcpyDeviceToHost);
-    while (num_merges_left > 0)
+
+    int tries = 1;
+    while (num_merges_left > 0 && tries > 0)
     {
         printf("Kernel 1 beginning...\n");
         perform_merges<<<128, 16>>>(solver);
@@ -882,5 +907,6 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
                    sizeof(int), cudaMemcpyDeviceToHost);
 
         printf("Kernels complete, and %d merges remain!\n", num_merges_left);
+        tries--;
     }
 }
