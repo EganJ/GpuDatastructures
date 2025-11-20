@@ -111,11 +111,17 @@ int main()
   std::vector<FuncNode> nodes;
   try
   {
+    // Gaurantee that demo.fpcore is first
+    {
+      std::cout << "Parsing FPCore file: " << benchdir + "demo.fpcore" << std::endl;
+      std::ifstream fpcorefile(benchdir + "demo.fpcore");
+      parseFPCoreFile(fpcorefile, nodes, expr_roots);
+    }
     for (const auto &entry : std::filesystem::recursive_directory_iterator(benchdir))
     {
-      if (entry.path().extension() == ".fpcore")
+      if (entry.path().extension() == ".fpcore" && entry.path().filename() != "demo.fpcore")
       {
-        // std::cout << "Parsing FPCore file: " << entry.path() << std::endl;
+        std::cout << "Parsing FPCore file: " << entry.path() << std::endl;
         std::ifstream fpcorefile(entry.path());
         parseFPCoreFile(fpcorefile, nodes, expr_roots);
       }

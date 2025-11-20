@@ -1,5 +1,28 @@
 ; -*- mode: scheme -*-
 
+(FPCore (x y)
+ :name "Optimisation.CirclePacking:place from circle-packing-0.1.0.4, A"
+ (sqrt (+ x y)))
+
+(FPCore (x)
+  : Name test to induce upwards merging on graph
+  (let* 
+    ([x1 (pow x 1)]
+     [x1p1 (+ x1 1)]
+     [xp1 (+ x 1)]
+     [onepx (+ 1 x)]
+     [pow1onepx (pow onepx 1)]
+     [pow1x1p1 (pow x1p1 1)]
+    )
+    (* pow1onepx (* pow1x1p1 xp1))
+  ))
+
+(FPCore (x) 
+  :name Test to induce merging on egraph
+  (sqrt (+ x (pow x 1)))
+)
+
+
 (FPCore (x y z)
  :name "fabs fraction 1"
  (fabs (- (/ (+ x 4) y) (* (/ x y) z))))

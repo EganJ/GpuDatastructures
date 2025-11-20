@@ -15,6 +15,16 @@ namespace gpuds::eqsat
 {
     __constant__ Ruleset global_ruleset;
 
+    __device__ void print_worklist(EqSatSolver* solver){
+        printf("Worklist: \n");
+        for(int i=0; i<solver->egraph.classes_to_merge_count; i++){
+            ClassesToMerge m = solver->egraph.classes_to_merge[i];
+            int first_resolved = solver->egraph.resolveClassReadOnly(m.firstClassID);
+            int second_resolved = solver->egraph.resolveClassReadOnly(m.secondClassID);
+            printf("  Merge %d: (%d->%d) <---> (%d->%d)\n", i, m.firstClassID, first_resolved, m.secondClassID, second_resolved);
+        }
+    }
+
     // Debugging
     __device__ void printgpustate_forcomputer(EqSatSolver *solver)
     {
@@ -89,6 +99,7 @@ namespace gpuds::eqsat
             }
             printf("\n");
         }
+        print_worklist(solver);
 
         printgpustate_forcomputer(solver);
     }
@@ -437,6 +448,10 @@ lead to different
             // TODO we can retrieve our slice of nodes into local beforehand,
             // to avoid fetching per rule.
             const FuncNode node = solver->egraph.getNode(node_idx);
+            if(node.name == FuncName::Unset){
+                // Unused node slot.
+                continue;
+            }
             int eclass_idx = solver->egraph.getClassOfNode(node_idx);
 
             MultiMatch initial_match = MultiMatch::nomatch();
@@ -461,8 +476,6 @@ lead to different
             allocation_end = min(allocation_end, N_LOCAL_MATCH_BUFF);
             for (int i = allocation_start; i < allocation_end; i++)
             {
-                // printf("Block %d Thread %d found match for rule %d on eclass %d\n",
-                //        blockIdx.x, threadIdx.x, threadIdx.x, eclass_idx);
                 local_matches[i].lhs_class_id = eclass_idx;
                 local_matches[i].rhs_root = my_rule.rhs;
                 for (int j = 0; j < MAX_RULE_VARS; j++)
@@ -506,7 +519,7 @@ lead to different
         int numBlocks = 512; // TODO tune. Can this be num_nodes or something?
         kernel_eqsat_match_rules<<<numBlocks, blockSize>>>(solver);
 
-        printf("Kernel Apply Rules Post: ----------------------------------------\n");
+        printf("Kernel Match Rules Post: ----------------------------------------\n");
         cudaDeviceSynchronize();
         printgpustate<<<1, 1>>>(solver);
         cudaDeviceSynchronize();
@@ -870,9 +883,14 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver)
                    offsetof(EqSatSolver, egraph) +
                    offsetof(EGraph, classes_to_merge_count),
                sizeof(int), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize(); // IMPORTANT to ensure we have the latest value!
+
+    printf("Starting repair phase with %d initial merges to perform.\n", num_merges_left);
 
     while (num_merges_left > 0)
     {
+        printf("Starting repair iteration with %d merges to perform.\n", num_merges_left);
+        cudaDeviceSynchronize();
         
         perform_merges<<<128, 16>>>(solver);
         printf("Repair Step 1 Post: ----------------------------------------\n");
