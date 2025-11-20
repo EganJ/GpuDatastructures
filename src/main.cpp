@@ -141,6 +141,6 @@ int main()
   gpuds::eqsat::EqSatSolver* solver = gpuds::eqsat::construct_eqsat_solver(nodes, root_subset, adjusted_indices);
   gpuds::eqsat::launch_eqsat_match_rules(solver);
   gpuds::eqsat::launch_eqsat_apply_rules(solver);
-  // gpuds::eqsat::launch_eqsat_merge_rules()
+  gpuds::eqsat::repair_egraph(solver);
   return 0;
 }

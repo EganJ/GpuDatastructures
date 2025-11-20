@@ -54,6 +54,7 @@ namespace gpuds::eqsat
                                                  std::vector<int> &compressed_roots);
 
     __host__ void launch_eqsat_apply_rules(EqSatSolver *solver);
+    __host__ void repair_egraph(EqSatSolver *solver);
 } // namespace gpuds::eqsat
 
 #endif

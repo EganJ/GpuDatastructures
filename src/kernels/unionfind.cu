@@ -104,7 +104,7 @@ __device__ int gpuds::unionfind::get_class(int *classes, int i)
  * classes[c] will try to point to both a and b. In sequence this
  * resolves by c --> b --> a.
  */
-__device__ void gpuds::unionfind::merge(int *classes, int a, int b)
+__device__ int gpuds::unionfind::atomic_merge_and_get_old_root(int *classes, int a, int b, int &old_root)
 {
   a = get_class(classes, a);
   do
@@ -112,7 +112,7 @@ __device__ void gpuds::unionfind::merge(int *classes, int a, int b)
     b = get_class(classes, b);
     if (a == b)
     {
-      return;
+      return -1;
     }
     else if (a > b)
     {
@@ -128,6 +128,16 @@ __device__ void gpuds::unionfind::merge(int *classes, int a, int b)
     // from atomicity, so this mantains all our invariants. Liveness is a little more
     // dubious.
   } while (0 != atomicCAS(classes + b, 0, a));
+  // After this condition: we have proved that b was a root at time of return,
+  // and now points to a (possibly stale) root. 
+  old_root = b;
+  return a;
+}
+
+__device__ void gpuds::unionfind::merge(int *classes, int a, int b)
+{
+  int old_root;
+  atomic_merge_and_get_old_root(classes, a, b, old_root);
 }
 
 /*

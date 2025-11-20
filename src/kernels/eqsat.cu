@@ -569,3 +569,73 @@ __host__ void gpuds::eqsat::launch_eqsat_apply_rules(EqSatSolver *solver)
 
 }
 
+__global__ void calculate_egraph_nodes_and_parents(EqSatSolver* solver)
+{
+    
+}
+
+/**
+ * Merges the items from the worklist but does not propogate to parents. Instead, marks parents
+ * to be check by a subsequent kernel.
+ */
+__global__ void perform_merges(EqSatSolver* solver){
+    int merges_per_thread = (solver->egraph.classes_to_merge_count + blockDim.x * gridDim.x - 1) / (blockDim.x * gridDim.x);
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int start_merge = tid * merges_per_thread;
+    int end_merge = min(solver->egraph.classes_to_merge_count, start_merge + merges_per_thread);
+
+    for (int i = start_merge; i < end_merge; i++)
+    {
+        ClassesToMerge m = solver->egraph.classes_to_merge[i];
+        
+        // Perform the merge. Rely on the fact that even if the union-find is 
+        // stale, the final result will be correct due to the implementation
+        // of the list concatenation: it will always find the appropriate
+        // list tail.
+
+        int old_root = -1;
+        int new_root = gpuds::unionfind::atomic_merge_and_get_old_root(solver->egraph.class_ids, m.firstClassID, m.secondClassID, old_root);
+        
+        if (new_root == -1){
+            // They were already merged.
+            continue;
+        }
+
+        // Concatenate old_root into new_root. The converse can lead to branching lists, so only this 
+        // direction is allowed.
+        concatLists(&solver->egraph.class_to_nodes[new_root], &solver->egraph.class_to_nodes[old_root]);
+        concatLists(&solver->egraph.class_to_parents[new_root], &solver->egraph.class_to_parents[old_root]);
+    }
+}
+
+// __global__ check_for_new_merges(EqSatSolver* solver){
+
+//     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     if tid > num_items_in_WL:
+//         BAIL!!!!!
+
+//     eclass = WL[tid];
+
+//     for parent of eclass:
+//         for parent2 of eclass:
+//             for enode in parent:
+//                 for enode2 in parent2:
+//                     if resolvedStructuralEquality(enode, enode2){
+//                         add_to_merge_WL(parent, parent2);
+//                     }
+
+//     for ()
+
+// }
+
+
+__host__ void gpuds::eqsat::repair_egraph(EqSatSolver* solver){
+    
+    // while (num_merges_available > 0){
+        perform_merges<<<128, 16>>>(solver);
+        printgpustate<<<1,1>>>(solver);
+    //     check_for_new_merges(solver);
+    //     // This will need to update the variable num_merges_available.
+    // }
+}

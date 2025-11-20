@@ -64,7 +64,6 @@ __device__ Value HashTable::lookup(const FuncNode &node)
             return -1;
         }
         idx = nextIdx(idx);
-
     }
 }
 
@@ -114,7 +113,6 @@ __device__ bool HashTable::insert(const FuncNode &key, Value val, Value &member_
             }
         }
         idx = nextIdx(idx);
-
     }
 }
 
@@ -153,8 +151,7 @@ __device__ void HashTable::remove(const FuncNode &key)
     }
 }
 
-
 __host__ void initialize_hashcons_memory(HashTable *ht)
 {
-   cudaMemset(ht->table, HashTable::kSentinelUnused, sizeof(HashValue) * MAX_HASH_CAPACITY);
+    cudaMemset(ht->table, HashTable::kSentinelUnused, sizeof(HashValue) * MAX_HASH_CAPACITY);
 }
