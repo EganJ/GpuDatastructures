@@ -99,7 +99,7 @@ int main(int argc, char **argv)
   }
 
   // Parse rules
-  std::ifstream rulefile("tmp_rules.txt");
+  std::ifstream rulefile("tmp_rules_69.txt");
 
   std::vector<FuncNode> rule_nodes{};
   std::vector<Rule> rules{};

@@ -7,15 +7,15 @@
 // TODO currently hardcoded from the rules list, find more elegant way
 // Number of rules in the rules list, exact.
 // const int N_RULES = 301;
-const int N_RULES = 56;
+const int N_RULES = 75-15;
 // Maximum number of terms across all rules.
 const int MAX_RULESET_TERMS = 700;
 
 // Made-up limits for now
 // Maximum number of supported equivalence classes, counting
 // ones that have been merged away.
-const int MAX_CLASSES = 10000;
-const int MAX_MERGE_LIST_SIZE = 10000;
+const int MAX_CLASSES = 100000;
+const int MAX_MERGE_LIST_SIZE = 100000;
 // Maximum number of nodes in the e-graph.
 const int MAX_NODES = 50000;
 const int MAX_LIST_SPACE = 2 * MAX_NODES * sizeof(int) / sizeof(char);

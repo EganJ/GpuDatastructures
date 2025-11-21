@@ -1,0 +1,102 @@
+Using the first 1 expressions found in the test set.
+Parsed 60 rules with 590 uncompressed total nodes.
+Compressed to 60 rules with 111 total nodes.
+Parsing FPCore file: bench/demo.fpcore
+Parsing FPCore file: "bench/mathematics/dirichlet-mixture-model.fpcore"
+Parsing FPCore file: "bench/mathematics/logistic-regression.fpcore"
+Parsing FPCore file: "bench/mathematics/hyperbolic-functions.fpcore"
+Parsing FPCore file: "bench/mathematics/gui.fpcore"
+Parsing FPCore file: "bench/mathematics/sarnoff.fpcore"
+Parsing FPCore file: "bench/mathematics/latlong.fpcore"
+Parsing FPCore file: "bench/mathematics/beta-distribution.fpcore"
+Parsing FPCore file: "bench/mathematics/excel.fpcore"
+Parsing FPCore file: "bench/mathematics/arvind.fpcore"
+Parsing FPCore file: "bench/mathematics/statistics.fpcore"
+Parsing FPCore file: "bench/mathematics/symmetry.fpcore"
+Parsing FPCore file: "bench/numerics/hamming-misc.fpcore"
+Parsing FPCore file: "bench/numerics/great-debate.fpcore"
+Parsing FPCore file: "bench/numerics/rosa.fpcore"
+Parsing FPCore file: "bench/numerics/every-cs.fpcore"
+Parsing FPCore file: "bench/numerics/kahan.fpcore"
+Parsing FPCore file: "bench/numerics/rump.fpcore"
+Parsing FPCore file: "bench/numerics/martel.fpcore"
+Parsing FPCore file: "bench/numerics/fma.fpcore"
+Parsing FPCore file: "bench/numerics/conte.fpcore"
+Parsing FPCore file: "bench/numerics/libm.fpcore"
+Parsing FPCore file: "bench/numerics/polynomial-cancellation.fpcore"
+Parsing FPCore file: "bench/tutorial.fpcore"
+Parsing FPCore file: "bench/physics/gated-magnetic-field.fpcore"
+Parsing FPCore file: "bench/physics/tea-whistle.fpcore"
+Parsing FPCore file: "bench/physics/ballistics.fpcore"
+Parsing FPCore file: "bench/physics/multiphoton-states.fpcore"
+Parsing FPCore file: "bench/physics/superfluidity-breakdown.fpcore"
+Parsing FPCore file: "bench/physics/quantum-walk.fpcore"
+Parsing FPCore file: "bench/physics/sidey.fpcore"
+Parsing FPCore file: "bench/physics/universal-linear-optics.fpcore"
+Parsing FPCore file: "bench/physics/tea-flows.fpcore"
+Parsing FPCore file: "bench/physics/dimer-escape.fpcore"
+Parsing FPCore file: "bench/graphics/lod.fpcore"
+Parsing FPCore file: "bench/graphics/pbrt.fpcore"
+Parsing FPCore file: "bench/libraries/mathjs/arithmetic.fpcore"
+Parsing FPCore file: "bench/libraries/mathjs/trigonometry.fpcore"
+Parsing FPCore file: "bench/libraries/mathjs/probability.fpcore"
+Parsing FPCore file: "bench/libraries/mathjs/complex.fpcore"
+Parsing FPCore file: "bench/libraries/rust.fpcore"
+Parsing FPCore file: "bench/libraries/octave/CollocWt.fpcore"
+Parsing FPCore file: "bench/libraries/octave/randgamma.fpcore"
+Parsing FPCore file: "bench/libraries/fast-math.fpcore"
+Parsing FPCore file: "bench/libraries/jmatjs.fpcore"
+Parsing FPCore file: "bench/hamming/trigonometry.fpcore"
+Parsing FPCore file: "bench/hamming/rearrangement.fpcore"
+Parsing FPCore file: "bench/hamming/quadratic.fpcore"
+Parsing FPCore file: "bench/hamming/series.fpcore"
+Parsing FPCore file: "bench/hamming/machine-decide.fpcore"
+Parsing FPCore file: "bench/hamming/overflow-underflow.fpcore"
+Parsing FPCore file: "bench/haskell.fpcore"
+Parsing FPCore file: "bench/regression.fpcore"
+Constructing E-graph for 549 expressions:
+ Expression 0 root node ID: 3 (sqrt (+ v0 v1))
+Expressions, uncompressed:
+(sqrt (+ v0 v1))
+Expressions, compressed:
+(sqrt (+ v0 v1))
+Initial GPU state:
+Egraph num nodes: 4
+Egraph num classes: 4
+Node 0: class 1 (resolved 1), name 1, args:
+  Arg 0: 0
+Node 1: class 2 (resolved 2), name 1, args:
+  Arg 0: 1
+Node 2: class 3 (resolved 3), name 3, args:
+  Arg 0: 1
+  Arg 1: 2
+Node 3: class 4 (resolved 4), name 9, args:
+  Arg 0: 3
+Membership by class:
+Class 1 (resolved 1): 0 
+Class 2 (resolved 2): 1 
+Class 3 (resolved 3): 2 
+Class 4 (resolved 4): 3 
+Parents by class:
+Class 1 (resolved 1): 3(3) 
+Class 2 (resolved 2): 3(3) 
+Class 3 (resolved 3): 4(4) 
+Class 4 (resolved 4): 
+Worklist: 
+Egraph num nodes: 4
+Egraph num classes: 4
+0,1,1,0,
+1,2,1,1,
+2,3,3,1,2,
+3,4,9,3,
+Done with iteration 1
+Done with iteration 2
+Starting repair iteration with 3 merges to perform.
+Starting repair iteration with 1 merges to perform.
+Starting repair iteration with 2 merges to perform.
+Done with iteration 3
+Starting repair iteration with 81 merges to perform.
+Starting repair iteration with 73 merges to perform.
+Starting repair iteration with 22 merges to perform.
+Starting repair iteration with 8 merges to perform.
+Done with iteration 4
