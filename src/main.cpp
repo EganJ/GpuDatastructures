@@ -1,6 +1,7 @@
 #include <iostream>
 #include <iomanip>
 #include <filesystem>
+#include <cuda_runtime.h>
 
 #include "datastructures.h"
 #include "parser.h"
@@ -145,7 +146,7 @@ int main(int argc, char **argv)
   gpuds::eqsat::initialize_eqsat_memory();
   gpuds::eqsat::initialize_ruleset_on_device(rule_nodes, rules);
 
-  int n_tests = 10;
+  int n_tests = n_expressions;
   std::vector<int> root_subset = std::vector<int>(expr_roots.begin(), expr_roots.begin() + std::min(n_tests, (int)expr_roots.size()));
   std::cout << "Constructing E-graph for " << expr_roots.size() << " expressions:" << std::endl;
   for (int i = 0; i < root_subset.size(); ++i)
@@ -165,6 +166,9 @@ int main(int argc, char **argv)
   cudaEventCreate(&match_stop);
   cudaEventCreate(&apply_stop);
   cudaEventCreate(&repair_stop);
+
+  int node_count;
+  int class_count;
   for (int i = 0; i < N_ITERS; i++)
   {
     cudaEventRecord(match_start);
@@ -189,6 +193,19 @@ int main(int argc, char **argv)
     float full_time;
     cudaEventElapsedTime(&full_time, match_start, repair_stop);
     data_metrics.time_sec_full_iteration.push_back(full_time / 1000.0f);
+
+    cudaMemcpy(&node_count,
+            (char *)solver +
+                offsetof(gpuds::eqsat::EqSatSolver, egraph) + offsetof(EGraph, num_nodes),
+            sizeof(int), cudaMemcpyDeviceToHost);
+  
+    cudaMemcpy(&class_count,
+          (char *)solver +
+              offsetof(gpuds::eqsat::EqSatSolver, egraph) + offsetof(EGraph, num_classes),
+          sizeof(int), cudaMemcpyDeviceToHost);
+
+    data_metrics.node_count_over_time.push_back(node_count);
+    data_metrics.class_count_over_time.push_back(class_count);
   }
   std::cout << "Final E-graph state:" << std::endl;
   gpuds::eqsat::print_eqsat_solver_state(solver);

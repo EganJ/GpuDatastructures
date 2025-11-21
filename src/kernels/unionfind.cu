@@ -51,11 +51,14 @@ namespace impl
 __device__ int gpuds::unionfind::get_class_readonly(const int *classes, int i)
 {
   assert(i >= 1 && "Looking up class of invalid element");
+  if (i < 1){
+    return -1;
+  }
   // Promote to atomic read?
   while (true)
   {
     int val;
-    __nv_atomic_load(&classes[i], &val, __ATOMIC_RELAXED);
+    __nv_atomic_load(&classes[i], &val, __ATOMIC_ACQUIRE);
     if (val == 0)
       break;
     // Classes should never return to being zero! Otherwise we have a

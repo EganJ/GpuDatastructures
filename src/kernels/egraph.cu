@@ -154,16 +154,19 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
     int node_id = atomicAdd(&num_nodes, 1);
     node_space[node_id] = node;
 
-    if (class_id == -1)
+    if (class_id < 0)
     {
         // Create new class
         class_id = atomicAdd(&num_classes, 1) + 1; // +1 because class 0 is unused
     }
     else
     {
+        // printf("T %d B %d resolving class %d for insertion\n", threadIdx.x, blockIdx.x, class_id);
         class_id = resolveClass(class_id);
     }
-    node_to_class[node_id] = class_id;
+
+    // node_to_class[node_id] = class_id;
+    atomicExch(&node_to_class[node_id], class_id);
 
     // Attempt to insert. If failed because of duplicate, mark changes as discarded.
     int existing_node_id = -1;
@@ -171,6 +174,7 @@ __device__ bool EGraph::insertNode(const FuncNode &node, int class_id, int &out_
 
     if (!inserted)
     {
+        assert(existing_node_id >= 0);
         // Discard changes
         // Cannot decrement num_nodes safely, so just leave the node unused.
         node_to_class[node_id] = -1; // mark as deleted

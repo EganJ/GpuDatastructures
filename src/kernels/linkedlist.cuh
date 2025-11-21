@@ -160,7 +160,8 @@ struct ListIterator
         if (finished)
             return false;
 
-        node->data[element_index] = v;
+        // node->data[element_index] = v;
+        *((T *)&node->data[element_index]) = v;
         return true;
     }
 

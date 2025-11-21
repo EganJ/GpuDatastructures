@@ -104,7 +104,7 @@ namespace gpuds::eqsat
             int parent_id;
             while (it.next(&parent_id))
             {
-                printf("%d(%d) ", parent_id, solver->egraph.resolveClassReadOnly(parent_id));
+                printf("%d(%d) ", parent_id, solver->egraph.resolveClassReadOnlySafe(parent_id));
             }
             printf("\n");
         }
@@ -113,10 +113,11 @@ namespace gpuds::eqsat
         printgpustate_forcomputer(solver);
     }
 
-     __host__ void print_eqsat_solver_state(EqSatSolver *solver){
+    __host__ void print_eqsat_solver_state(EqSatSolver *solver)
+    {
         printgpustate<<<1, 1>>>(solver);
         cudaDeviceSynchronize();
-     }
+    }
 
     /**
      * Host-side code to initialize memory structures needed for eqsat.
@@ -429,6 +430,8 @@ lead to different
         ListIterator<int> it(class_nodes);
         while (it.next(&enode_idx))
         {
+            if (enode_idx < 0)
+                continue; // Deleted node, skip.
             find_matches_enode(graph, pattern, enode_idx, match_in, match_out);
         }
     }
@@ -553,7 +556,8 @@ __device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx,
     node_out = global_ruleset.rule_nodes[rhs_node_idx];
     if (node_out.name == FuncName::Var)
     {
-        return solver->egraph.resolveClass(var_bindings.bindings[node_out.args[0]]); // Already bound by match.
+        assert(var_bindings.bindings[node_out.args[0]] >= 0 && "Variable in RHS not bound by match");
+        return solver->egraph.resolveClassReadOnlySafe(var_bindings.bindings[node_out.args[0]]); // Already bound by match.
     }
     if (node_out.name != FuncName::Const)
     {
@@ -572,6 +576,12 @@ __device__ int lookup_and_insert_children(EqSatSolver *solver, int rhs_node_idx,
                 // Insert child
                 int found_node = -1;
                 bool inserted = solver->egraph.insertNode(child_node, -1, found_node);
+                // Here we have a potential race condition on class_id being written, due to nonsequential
+                // consistency of writes. To avoid reading a half-written class_id, we use an atomic
+                // Do we have to atomic_load the class id, or does the atomic write in insertNode guarantee
+                // that readers will see either the old or new value?
+                assert(found_node != -1 && "InsertNode should always return a valid node");
+                assert(solver->egraph.node_to_class[found_node] != 0 && "Inserted node should have valid class ID");
                 child_eclass = solver->egraph.getClassOfNode(found_node);
             }
             node_out.args[i] = child_eclass;
@@ -606,7 +616,9 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
     }
 
     FuncNode rhs_root_node; // Root after promoting children to eclasses.
+    // printf("T %d B %d looing up rhs root %d\n", threadIdx.x, blockIdx.x, match.rhs_root);
     int rhs_eclass = lookup_and_insert_children(solver, match.rhs_root, var_bindings, rhs_root_node);
+    // printf("T %d B %d lookup result: eclass %d\n", threadIdx.x, blockIdx.x, rhs_eclass);
 
     const int NOT_FOUND = -1;
     if (rhs_eclass == NOT_FOUND)
@@ -614,7 +626,15 @@ __device__ void apply_match(EqSatSolver *solver, const RuleMatch &match)
         // Need to insert the root node into the matched LHS class.
         int found_node = -1;
         bool inserted = solver->egraph.insertNode(rhs_root_node, match.lhs_class_id, found_node);
-        rhs_eclass = solver->egraph.getClassOfNode(found_node);
+        if (inserted)
+        {
+            // We inserted a new node, so its class is the LHS class.
+            rhs_eclass = match.lhs_class_id;
+        }
+        else
+        {   
+            rhs_eclass = solver->egraph.getClassOfNode(found_node);
+        }
     }
 
     // If after inserting/looking up we find that our node is in a different class,
@@ -695,8 +715,14 @@ __device__ void dehash_parent(EqSatSolver *solver, int parent_id)
     int node_id;
     while (it.next(&node_id))
     {
-        // Remove from hashcons
+        if (node_id < 0)
+            continue; // Deleted node, skip.
+        // Remove from hashcons        
         FuncNode node = solver->egraph.getNode(node_id);
+        if (node.name == FuncName::Unset)
+        {
+            continue; // Deleted node, skip.
+        }
         solver->egraph.hashcons.remove(node);
     }
 }
@@ -872,7 +898,6 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver, Metric &metrics)
                sizeof(int), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize(); // ensure we have the latest value
 
-
     cudaEvent_t start_event, stop_event, start_event_dedup, stop_event_dedup, start_event_reinsert, stop_event_reinsert;
     cudaEventCreate(&start_event);
     cudaEventCreate(&stop_event);
@@ -884,10 +909,10 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver, Metric &metrics)
     std::vector<float> elapsed_time_dedup;
     std::vector<float> elapsed_time_reinsert;
     metrics.merges_per_repair_iteration.emplace_back();
-    
+
     while (num_merges_left > 0)
     {
-        metrics.merges_per_repair_iteration[metrics.merges_per_repair_iteration.size()-1].push_back(num_merges_left);
+        metrics.merges_per_repair_iteration[metrics.merges_per_repair_iteration.size() - 1].push_back(num_merges_left);
 
         printf("Starting repair iteration with %d merges to perform.\n", num_merges_left);
 
@@ -898,7 +923,6 @@ __host__ void gpuds::eqsat::repair_egraph(EqSatSolver *solver, Metric &metrics)
         cudaEventRecord(start_event_dedup);
         deduplicate_and_dehash_parents<<<512, 16>>>(solver);
         cudaEventRecord(stop_event_dedup);
-
 
         cudaEventRecord(start_event_reinsert);
         reinsert_parents_of_merged<<<512, 16>>>(solver);
