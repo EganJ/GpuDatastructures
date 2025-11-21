@@ -1,5 +1,11 @@
 # Gpu Equality Saturation
 
+# Building and running
+
+1) Edit CUDA_ARCHITECTURES in CMakeLists.txt to reflect the compute architecture of your Nvidia GPU. For example, an RTX 6000 Ada GPU would be 89 and a 5090 would be 120.
+2) From a new "build" directory, run `cmake ..` and `make`
+3) The program should be run from the root directory of the repo, as `./build/main`
+
 ## Related
 
 ### Egg 
