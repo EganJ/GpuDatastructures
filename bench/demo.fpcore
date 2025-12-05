@@ -1,0 +1,65 @@
+; -*- mode: scheme -*-
+
+(FPCore (x y)
+ :name "Optimisation.CirclePacking:place from circle-packing-0.1.0.4, A"
+ (sqrt (+ x y)))
+
+(FPCore (x)
+  : Name test to induce upwards merging on graph
+  (let* 
+    ([x1 (pow x 1)]
+     [x1p1 (+ x1 1)]
+     [xp1 (+ x 1)]
+     [onepx (+ 1 x)]
+     [pow1onepx (pow onepx 1)]
+     [pow1x1p1 (pow x1p1 1)]
+    )
+    (* pow1onepx (* pow1x1p1 xp1))
+  ))
+
+(FPCore (x) 
+  :name Test to induce merging on egraph
+  (sqrt (+ x (pow x 1)))
+)
+
+
+(FPCore (x y z)
+ :name "fabs fraction 1"
+ (fabs (- (/ (+ x 4) y) (* (/ x y) z))))
+
+(FPCore (a b)
+ :name "fabs fraction 2"
+ (/ (fabs (- a b)) 2))
+
+(FPCore (f n)
+ :name "subtraction fraction"
+ (/ (- (+ f n)) (- f n)))
+
+(FPCore (x)
+ :name "exp neg sub"
+ (exp (- (- 1 (* x x)))))
+
+(FPCore (x)
+ :name "sqrt times"
+ (* (sqrt (- x 1)) (sqrt x)))
+
+(FPCore (x)
+ :name "neg log"
+ (- (log (- (/ 1 x) 1))))
+
+(FPCore (x)
+ :name "sqrt sqr"
+ :alt 
+ (! :herbie-platform default (if (< x 0) 2 0))
+
+ (- (/ x x) (* (/ 1 x) (sqrt (* x x)))))
+
+(FPCore (a b c)
+ :name "jeff quadratic root 1"
+ (let ((d (sqrt (- (* b b) (* (* 4 a) c)))))
+   (if (>= b 0) (/ (- (- b) d) (* 2 a)) (/ (* 2 c) (+ (- b) d)))))
+
+(FPCore (a b c)
+ :name "jeff quadratic root 2"
+ (let ((d (sqrt (- (* b b) (* (* 4 a) c)))))
+   (if (>= b 0) (/ (* 2 c) (- (- b) d)) (/ (+ (- b) d) (* 2 a)))))
